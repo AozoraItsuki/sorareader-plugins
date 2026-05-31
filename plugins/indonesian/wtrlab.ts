@@ -538,7 +538,7 @@ class WTRLAB implements Plugin.PluginBase {
       throw new Error(errorMsg);
     }
 
-    const translationTypes = ['ai', 'web'];
+    const translationTypes = ['webplus'];
 
     let eLog = '';
     let parsedJson;

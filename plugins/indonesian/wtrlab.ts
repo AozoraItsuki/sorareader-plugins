@@ -8,7 +8,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.1.4';
+  version = '1.1.5';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
@@ -598,7 +598,6 @@ class WTRLAB implements Plugin.PluginBase {
         return htmlString;
       }
       chapterContent = await this.translate(chapterContent);
-      htmlString += `<p><small>This is being translated from your device via google translate (source's method) - Login via web view to try for ai translations</small></p>`;
     }
 
     if (eLog !== '') {

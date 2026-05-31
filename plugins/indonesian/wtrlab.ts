@@ -485,58 +485,26 @@ class WTRLAB implements Plugin.PluginBase {
   }
 
   async translate(data: string[]): Promise<string[]> {
-    const CONCURRENCY = 25;
-    const DELAY_MS = 20;
+    const contained = data.map((line, i) => `<a i=${i}>${line}</a>`);
 
-    const sleep = (ms: number) =>
-      new Promise(resolve => setTimeout(resolve, ms));
-
-    async function translateText(text: string, retries = 3): Promise<string> {
-      const url =
-        'https://translate.googleapis.com/translate_a/single?' +
-        new URLSearchParams({
-          client: 'gtx',
-          sl: 'auto',
-          tl: 'id',
-          dt: 't',
-          q: text,
-        });
-
-      for (let attempt = 0; attempt < retries; attempt++) {
-        try {
-          const res = await fetchApi(url);
-          const json = await res.json();
-
-          return json[0].map((x: any[]) => x[0]).join('');
-        } catch (e) {
-          if (attempt < retries - 1) {
-            await sleep(500 * (attempt + 1));
-          }
-        }
-      }
-
-      return text;
-    }
-
-    const results = new Array<string>(data.length);
-
-    async function worker(index: number) {
-      await sleep(index * DELAY_MS);
-
-      results[index] = await translateText(data[index]);
-    }
-
-    for (let i = 0; i < data.length; i += CONCURRENCY) {
-      const batch = [];
-
-      for (let j = i; j < Math.min(i + CONCURRENCY, data.length); j++) {
-        batch.push(worker(j));
-      }
-
-      await Promise.all(batch);
-    }
-
-    return results;
+    const response = await fetchApi(
+      'https://translate-pa.googleapis.com/v1/translateHtml',
+      {
+        'credentials': 'omit',
+        'headers': {
+          'content-type': 'application/json+protobuf',
+          // Generic public API key source also uses
+          // Seen all over google
+          'X-Goog-API-Key': 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520',
+        },
+        'referrer': 'https://wtr-lab.com/',
+        'body': `[[${JSON.stringify(contained)},"zh-CN","id"],"te_lib"]`,
+        'method': 'POST',
+      },
+    );
+    const translated = await response.json();
+    const out = translated && translated[0] ? translated[0] : [];
+    return out as string[];
   }
 
   async parseChapter(chapterPath: string): Promise<string> {

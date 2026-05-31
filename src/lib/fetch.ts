@@ -1,6 +1,8 @@
 /* global Buffer, RequestInit */
 
-import { parse as parseProto } from 'protobufjs';
+import proto from 'protobufjs';
+
+const parseProto = proto.parse;
 
 export type FetchInit = {
   headers?: Record<string, string | undefined> | Headers;

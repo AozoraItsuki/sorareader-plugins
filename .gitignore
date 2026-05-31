@@ -9,7 +9,6 @@ plugins/*/*\[*\]*.ts
 
 # ignore dist stuffs
 .DS_Store
-dist
 total.svg
 src/plugins/index.ts
 .history

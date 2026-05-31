@@ -10,7 +10,7 @@ const REMOTE = execSync('git remote get-url origin')
 const CURRENT_BRANCH = execSync('git branch --show-current')
   .toString()
   .replace(/[\s\n]/g, '');
-const BRANCH = process.env.BRANCH ? process.env.BRANCH : 'refs/heads/maim';
+const BRANCH = process.env.BRANCH ? process.env.BRANCH : 'refs/heads/main';
 const matched = REMOTE.match(/([^:/]+?)\/([^/.]+)(\.git)?$/);
 if (!matched) throw Error('Cant parse git url');
 const USERNAME = matched[1];

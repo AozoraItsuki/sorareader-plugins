@@ -387,8 +387,14 @@ class WTRLAB implements Plugin.PluginBase {
     novel.chapters = chapters;
 
     if (novel.summary) {
-      const translated = await this.translate([novel.summary]);
-      novel.summary = translated[0] || novel.summary;
+      const lines = novel.summary.split('\n').filter(line => line.trim());
+
+      const translated = await this.translate(lines);
+
+      novel.summary = translated
+        .map(line => parseHTML(line).text().trim())
+        .filter(line => line)
+        .join('\n\n');
     }
 
     return novel;
@@ -490,7 +496,7 @@ class WTRLAB implements Plugin.PluginBase {
   }
 
   async translate(data: string[]): Promise<string[]> {
-    const contained = data.map((line, i) => `<a i=${i}>${line}</a>`);
+    //const contained = data.map((line, i) => `<a i=${i}>${line}</a>`);
 
     const response = await fetchApi(
       'https://translate-pa.googleapis.com/v1/translateHtml',
@@ -503,7 +509,7 @@ class WTRLAB implements Plugin.PluginBase {
           'X-Goog-API-Key': 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520',
         },
         'referrer': 'https://wtr-lab.com/',
-        'body': `[[${JSON.stringify(contained)},"","id"],"te_lib"]`,
+        'body': `[[${JSON.stringify(data)},"auto","id"],"te_lib"]`,
         'method': 'POST',
       },
     );

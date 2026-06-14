@@ -386,6 +386,11 @@ class WTRLAB implements Plugin.PluginBase {
 
     novel.chapters = chapters;
 
+    if (novel.summary) {
+      const translated = await this.translate([novel.summary]);
+      novel.summary = translated[0] || novel.summary;
+    }
+
     return novel;
   }
 
@@ -498,7 +503,7 @@ class WTRLAB implements Plugin.PluginBase {
           'X-Goog-API-Key': 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520',
         },
         'referrer': 'https://wtr-lab.com/',
-        'body': `[[${JSON.stringify(contained)},"zh-CN","id"],"te_lib"]`,
+        'body': `[[${JSON.stringify(contained)},"","id"],"te_lib"]`,
         'method': 'POST',
       },
     );
@@ -1766,6 +1771,7 @@ type Chapter = {
   created_at: string;
   updated_at: string;
 };
+
 type ApiChapter = {
   serie_id: number;
   id: number;
@@ -1784,6 +1790,7 @@ type ApiChapter = {
 type ChapterData = {
   data: ChapterContent;
 };
+
 type ChapterContent = {
   title: string;
   body: string;
@@ -1827,6 +1834,7 @@ type JsonNovel = {
   success: boolean;
   data: Datum[];
 };
+
 type Datum = {
   serie: Serie;
   chapters: Chapter[];

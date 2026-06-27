@@ -8,7 +8,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.5.5';
+  version = '1.2.1';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
@@ -136,10 +136,14 @@ class WTRLAB implements Plugin.PluginBase {
         this.tagIdMap = new Map<string, string>(
           ungrouped.map(t => [String(t.value), t.label]),
         );
-        this.filters.tags.options = ungrouped.map(t => ({
-          label: t.label,
-          value: String(t.value),
-        }));
+        const groups = (json.pageProps.tags.groups ?? []) as {
+          id: number;
+          name: string;
+        }[];
+        this.filters.tags.options = [
+          ...ungrouped.map(t => ({ label: t.label, value: String(t.value) })),
+          ...groups.map(t => ({ label: t.name, value: String(t.id) })),
+        ].sort((a, b) => a.label.localeCompare(b.label));
       }
 
       const seenIds = new Set();
@@ -185,10 +189,14 @@ class WTRLAB implements Plugin.PluginBase {
       json.pageProps?.tags?.ungrouped ?? [];
 
     this.tagIdMap = new Map(ungrouped.map(t => [String(t.value), t.label]));
-    this.filters.tags.options = ungrouped.map(t => ({
-      label: t.label,
-      value: String(t.value),
-    }));
+    const groups = (json.pageProps?.tags?.groups ?? []) as {
+      id: number;
+      name: string;
+    }[];
+    this.filters.tags.options = [
+      ...ungrouped.map(t => ({ label: t.label, value: String(t.value) })),
+      ...groups.map(t => ({ label: t.name, value: String(t.id) })),
+    ].sort((a, b) => a.label.localeCompare(b.label));
   }
 
   async fetchTokens() {
@@ -271,21 +279,18 @@ class WTRLAB implements Plugin.PluginBase {
             novel.status = 'Unknown';
         }
 
-        // Convert genre IDs → names
+        // Convert genre IDs → names, then tag IDs → names, merge unique
         const genreNames = (serieData.genres ?? [])
           .map(id => genreIdMap.get(String(id)))
           .filter((name): name is string => !!name);
 
-        // Convert tag IDs → names
         const tagNames = (serieData.tags ?? [])
           .map(id => tagIdMap.get(String(id)))
           .filter((name): name is string => !!name);
 
-        if (genreNames.length > 0) {
-          novel.genres = genreNames.join(',');
-        }
-        if (tagNames.length > 0) {
-          novel.tags = tagNames.join(',');
+        const allGenres = [...new Set([...genreNames, ...tagNames])];
+        if (allGenres.length > 0) {
+          novel.genres = allGenres.join(', ');
         }
       }
     }

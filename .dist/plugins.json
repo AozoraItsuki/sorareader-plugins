@@ -5,8 +5,8 @@
 		"site": "https://indowebnovel.id/",
 		"lang": "Bahasa Indonesia",
 		"version": "1.2.3",
-		"url": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/.js/plugins/indonesian/indowebnovel.js",
-		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/public/static/src/id/indowebnovel/icon.png"
+		"url": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/.js/plugins/indonesian/indowebnovel.js",
+		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/public/static/src/id/indowebnovel/icon.png"
 	},
 	{
 		"id": "WTRLAB",
@@ -14,7 +14,7 @@
 		"site": "https://wtr-lab.com/",
 		"lang": "Bahasa Indonesia",
 		"version": "1.5.4",
-		"url": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/.js/plugins/indonesian/wtrlab.js",
-		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/public/static/src/id/wtrlab/icon.png"
+		"url": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/.js/plugins/indonesian/wtrlab.js",
+		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/public/static/src/id/wtrlab/icon.png"
 	}
 ]

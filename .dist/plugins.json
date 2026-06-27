@@ -1,5 +1,14 @@
 [
 	{
+		"id": "IDWN.id",
+		"name": "IndoWebNovel",
+		"site": "https://indowebnovel.id/",
+		"lang": "Bahasa Indonesia",
+		"version": "1.2.3",
+		"url": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/.js/plugins/indonesian/indowebnovel.js",
+		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/public/static/src/id/indowebnovel/icon.png"
+	},
+	{
 		"id": "WTRLAB",
 		"name": "WTR-LAB",
 		"site": "https://wtr-lab.com/",

@@ -8,7 +8,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.5.2';
+  version = '1.5.3';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
@@ -94,6 +94,7 @@ class WTRLAB implements Plugin.PluginBase {
 
       const recentNovel: JsonNovel = await response.json();
 
+      // Parse novels from JSON
       const novels: Plugin.NovelItem[] = recentNovel.data.map(
         (datum: Datum) => ({
           name: datum.serie.data.title || datum.serie.slug || '',
@@ -126,12 +127,19 @@ class WTRLAB implements Plugin.PluginBase {
       const response = await fetchApi(link);
       const json = await response.json();
 
+      // Cache tag ID → label map from novel-finder response (avoid hardcoding)
       if (this.tagIdMap.size === 0 && json.pageProps?.tags?.ungrouped) {
+        const ungrouped = json.pageProps.tags.ungrouped as {
+          value: number;
+          label: string;
+        }[];
         this.tagIdMap = new Map<string, string>(
-          (
-            json.pageProps.tags.ungrouped as { value: number; label: string }[]
-          ).map(t => [String(t.value), t.label]),
+          ungrouped.map(t => [String(t.value), t.label]),
         );
+        this.filters.tags.options = ungrouped.map(t => ({
+          label: t.label,
+          value: String(t.value),
+        }));
       }
 
       const seenIds = new Set();
@@ -157,6 +165,7 @@ class WTRLAB implements Plugin.PluginBase {
   async ensureTagMap(): Promise<void> {
     if (this.tagIdMap.size > 0) return;
 
+    // Fetch buildId first if not cached
     if (!this.buildId) {
       const finderPage = await fetchApi(this.site + 'en/novel-finder').then(
         res => res.text(),
@@ -176,6 +185,10 @@ class WTRLAB implements Plugin.PluginBase {
       json.pageProps?.tags?.ungrouped ?? [];
 
     this.tagIdMap = new Map(ungrouped.map(t => [String(t.value), t.label]));
+    this.filters.tags.options = ungrouped.map(t => ({
+      label: t.label,
+      value: String(t.value),
+    }));
   }
 
   async fetchTokens() {
@@ -215,6 +228,7 @@ class WTRLAB implements Plugin.PluginBase {
       summary: loadedCheerio('.lead').text().trim(),
     };
 
+    // Parse __NEXT_DATA__ once and extract everything needed
     let parsedNextData: NovelJson | null = null;
     if (nextDataText) {
       try {
@@ -224,9 +238,11 @@ class WTRLAB implements Plugin.PluginBase {
       }
     }
 
+    // Build lookup maps from filter options (ID → label)
     const genreIdMap = new Map<string, string>(
       this.filters.genres.options.map(o => [o.value, o.label]),
     );
+    // Ensure tag map is populated (may not be if parseNovel called before popularNovels)
     if (this.tagIdMap.size === 0) {
       await this.ensureTagMap();
     }
@@ -255,6 +271,7 @@ class WTRLAB implements Plugin.PluginBase {
             novel.status = 'Unknown';
         }
 
+        // Convert genre IDs → names, then tag IDs → names, merge unique
         const genreNames = (serieData.genres ?? [])
           .map(id => genreIdMap.get(String(id)))
           .filter((name): name is string => !!name);

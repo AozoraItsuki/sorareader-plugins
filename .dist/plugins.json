@@ -4,7 +4,7 @@
 		"name": "WTR-LAB",
 		"site": "https://wtr-lab.com/",
 		"lang": "Bahasa Indonesia",
-		"version": "1.5.2",
+		"version": "1.5.3",
 		"url": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/.js/plugins/indonesian/wtrlab.js",
 		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/lnreader-plugins/main/public/static/src/id/wtrlab/icon.png"
 	}

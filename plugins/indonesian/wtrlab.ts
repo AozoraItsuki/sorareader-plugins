@@ -8,7 +8,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.5.3';
+  version = '1.5.4';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
@@ -282,7 +282,7 @@ class WTRLAB implements Plugin.PluginBase {
 
         const allGenres = [...new Set([...genreNames, ...tagNames])];
         if (allGenres.length > 0) {
-          novel.genres = allGenres.join(', ');
+          novel.genres = allGenres.join(',');
         }
       }
     }

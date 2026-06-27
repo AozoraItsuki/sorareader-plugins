@@ -8,7 +8,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.5.4';
+  version = '1.5.5';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
@@ -271,18 +271,21 @@ class WTRLAB implements Plugin.PluginBase {
             novel.status = 'Unknown';
         }
 
-        // Convert genre IDs → names, then tag IDs → names, merge unique
+        // Convert genre IDs → names
         const genreNames = (serieData.genres ?? [])
           .map(id => genreIdMap.get(String(id)))
           .filter((name): name is string => !!name);
 
+        // Convert tag IDs → names
         const tagNames = (serieData.tags ?? [])
           .map(id => tagIdMap.get(String(id)))
           .filter((name): name is string => !!name);
 
-        const allGenres = [...new Set([...genreNames, ...tagNames])];
-        if (allGenres.length > 0) {
-          novel.genres = allGenres.join(',');
+        if (genreNames.length > 0) {
+          novel.genres = genreNames.join(',');
+        }
+        if (tagNames.length > 0) {
+          novel.tags = tagNames.join(',');
         }
       }
     }

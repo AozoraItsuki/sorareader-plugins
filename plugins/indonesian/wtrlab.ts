@@ -8,13 +8,14 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.2.1';
+  version = '1.6.1';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
   trace = '';
   private buildId = '';
   private tagIdMap: Map<string, string> = new Map();
+  private genreIdMap: Map<string, string> = new Map();
 
   get headers(): Record<string, string> {
     return {
@@ -94,7 +95,6 @@ class WTRLAB implements Plugin.PluginBase {
 
       const recentNovel: JsonNovel = await response.json();
 
-      // Parse novels from JSON
       const novels: Plugin.NovelItem[] = recentNovel.data.map(
         (datum: Datum) => ({
           name: datum.serie.data.title || datum.serie.slug || '',
@@ -127,23 +127,8 @@ class WTRLAB implements Plugin.PluginBase {
       const response = await fetchApi(link);
       const json = await response.json();
 
-      // Cache tag ID → label map from novel-finder response (avoid hardcoding)
       if (this.tagIdMap.size === 0 && json.pageProps?.tags?.ungrouped) {
-        const ungrouped = json.pageProps.tags.ungrouped as {
-          value: number;
-          label: string;
-        }[];
-        this.tagIdMap = new Map<string, string>(
-          ungrouped.map(t => [String(t.value), t.label]),
-        );
-        const groups = (json.pageProps.tags.groups ?? []) as {
-          id: number;
-          name: string;
-        }[];
-        this.filters.tags.options = [
-          ...ungrouped.map(t => ({ label: t.label, value: String(t.value) })),
-          ...groups.map(t => ({ label: t.name, value: String(t.id) })),
-        ].sort((a, b) => a.label.localeCompare(b.label));
+        this.populateTagMap(json);
       }
 
       const seenIds = new Set();
@@ -166,10 +151,27 @@ class WTRLAB implements Plugin.PluginBase {
     }
   }
 
+  private populateTagMap(json: {
+    pageProps?: {
+      tags?: {
+        ungrouped?: { value: number; label: string }[];
+        groups?: { id: number; name: string }[];
+      };
+    };
+  }): void {
+    const ungrouped = json.pageProps?.tags?.ungrouped ?? [];
+    const groups = json.pageProps?.tags?.groups ?? [];
+
+    this.tagIdMap = new Map(ungrouped.map(t => [String(t.value), t.label]));
+    this.filters.tags.options = [
+      ...ungrouped.map(t => ({ label: t.label, value: String(t.value) })),
+      ...groups.map(t => ({ label: t.name, value: String(t.id) })),
+    ].sort((a, b) => a.label.localeCompare(b.label));
+  }
+
   async ensureTagMap(): Promise<void> {
     if (this.tagIdMap.size > 0) return;
 
-    // Fetch buildId first if not cached
     if (!this.buildId) {
       const finderPage = await fetchApi(this.site + 'en/novel-finder').then(
         res => res.text(),
@@ -181,22 +183,11 @@ class WTRLAB implements Plugin.PluginBase {
       this.buildId = JSON.parse(nextData).buildId;
     }
 
-    const res = await fetchApi(
+    const json = await fetchApi(
       `${this.site}_next/data/${this.buildId}/en/novel-finder.json`,
-    );
-    const json = await res.json();
-    const ungrouped: { value: number; label: string }[] =
-      json.pageProps?.tags?.ungrouped ?? [];
+    ).then(r => r.json());
 
-    this.tagIdMap = new Map(ungrouped.map(t => [String(t.value), t.label]));
-    const groups = (json.pageProps?.tags?.groups ?? []) as {
-      id: number;
-      name: string;
-    }[];
-    this.filters.tags.options = [
-      ...ungrouped.map(t => ({ label: t.label, value: String(t.value) })),
-      ...groups.map(t => ({ label: t.name, value: String(t.id) })),
-    ].sort((a, b) => a.label.localeCompare(b.label));
+    this.populateTagMap(json);
   }
 
   async fetchTokens() {
@@ -236,7 +227,6 @@ class WTRLAB implements Plugin.PluginBase {
       summary: loadedCheerio('.lead').text().trim(),
     };
 
-    // Parse __NEXT_DATA__ once and extract everything needed
     let parsedNextData: NovelJson | null = null;
     if (nextDataText) {
       try {
@@ -246,15 +236,14 @@ class WTRLAB implements Plugin.PluginBase {
       }
     }
 
-    // Build lookup maps from filter options (ID → label)
-    const genreIdMap = new Map<string, string>(
-      this.filters.genres.options.map(o => [o.value, o.label]),
-    );
-    // Ensure tag map is populated (may not be if parseNovel called before popularNovels)
+    if (this.genreIdMap.size === 0) {
+      this.genreIdMap = new Map(
+        this.filters.genres.options.map(o => [o.value, o.label]),
+      );
+    }
     if (this.tagIdMap.size === 0) {
       await this.ensureTagMap();
     }
-    const tagIdMap = this.tagIdMap;
 
     if (parsedNextData) {
       const serieData = parsedNextData?.props?.pageProps?.serie?.serie_data;
@@ -279,13 +268,12 @@ class WTRLAB implements Plugin.PluginBase {
             novel.status = 'Unknown';
         }
 
-        // Convert genre IDs → names, then tag IDs → names, merge unique
         const genreNames = (serieData.genres ?? [])
-          .map(id => genreIdMap.get(String(id)))
+          .map(id => this.genreIdMap.get(String(id)))
           .filter((name): name is string => !!name);
 
         const tagNames = (serieData.tags ?? [])
-          .map(id => tagIdMap.get(String(id)))
+          .map(id => this.tagIdMap.get(String(id)))
           .filter((name): name is string => !!name);
 
         const allGenres = [...new Set([...genreNames, ...tagNames])];
@@ -351,12 +339,14 @@ class WTRLAB implements Plugin.PluginBase {
       slug = urlMatch[2];
     }
 
-    const chapterCountText =
-      loadedCheerio('.detail-line:contains("Chapters")').text() ||
-      loadedCheerio('div:contains("Chapters")').text();
-    const chapterCountMatch = chapterCountText.match(/(\d+)\s+Chapters?/i);
-    if (chapterCountMatch) {
-      chapterCount = parseInt(chapterCountMatch[1]);
+    if (chapterCount === 0) {
+      const chapterCountText =
+        loadedCheerio('.detail-line:contains("Chapters")').text() ||
+        loadedCheerio('div:contains("Chapters")').text();
+      const chapterCountMatch = chapterCountText.match(/(\d+)\s+Chapters?/i);
+      if (chapterCountMatch) {
+        chapterCount = parseInt(chapterCountMatch[1]);
+      }
     }
     let chapters: Plugin.ChapterItem[] = [];
 
@@ -429,7 +419,6 @@ class WTRLAB implements Plugin.PluginBase {
   async getKey($: CheerioAPI): Promise<string> {
     const searchKey = 'TextEncoder().encode("';
 
-    // Collect unique script src URLs from <head>
     const URLs = [
       ...new Set(
         $('head script')
@@ -439,7 +428,6 @@ class WTRLAB implements Plugin.PluginBase {
       ),
     ];
 
-    // Fetch all scripts in parallel and search for the key
     const results = await Promise.all(
       URLs.map(async src => {
         const raw = await fetchApi(`${this.site}${src}`).then(r => r.text());
@@ -454,16 +442,12 @@ class WTRLAB implements Plugin.PluginBase {
   }
 
   async translate(data: string[]): Promise<string[]> {
-    //const contained = data.map((line, i) => `<a i=${i}>${line}</a>`);
-
     const response = await fetchApi(
       'https://translate-pa.googleapis.com/v1/translateHtml',
       {
         'credentials': 'omit',
         'headers': {
           'content-type': 'application/json+protobuf',
-          // Generic public API key source also uses
-          // Seen all over google
           'X-Goog-API-Key': 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520',
         },
         'referrer': 'https://wtr-lab.com/',
@@ -486,7 +470,6 @@ class WTRLAB implements Plugin.PluginBase {
     if (urlMatch) {
       rawId = parseInt(urlMatch[1], 10);
       chapterNo = parseInt(urlMatch[2], 10);
-      // console.log('Extracted from URL - rawId:', rawId, 'chapterNo:', chapterNo);
     }
 
     if (!rawId || !chapterNo) {
@@ -496,7 +479,6 @@ class WTRLAB implements Plugin.PluginBase {
       const chapterJson = loadedCheerio('#__NEXT_DATA__').html() + '';
       const jsonData: NovelJson = JSON.parse(chapterJson);
 
-      // const chapterID = jsonData.props.pageProps.serie.chapter.id;
       rawId = jsonData.props.pageProps.serie.chapter.raw_id;
       chapterNo = jsonData.props.pageProps.serie.chapter.order;
     }
@@ -639,8 +621,10 @@ class WTRLAB implements Plugin.PluginBase {
     searchTerm: string,
     page: number,
   ): Promise<Plugin.NovelItem[]> {
-    const filters = this.filters;
-    filters.search.value = searchTerm;
+    const filters = {
+      ...this.filters,
+      search: { ...this.filters.search, value: searchTerm },
+    };
     return this.popularNovels(page, { showLatestNovels: false, filters });
   }
 
@@ -886,12 +870,6 @@ type ApiChapter = {
   updated_at: string;
 };
 
-// type GlossaryTerm = {
-//   index: number;
-//   english: string;
-//   chinese: string;
-//   symbol: string;
-// };
 type ChapterData = {
   data: ChapterContent;
 };

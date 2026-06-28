@@ -8,7 +8,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.6.1';
+  version = '1.6.2';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
@@ -276,9 +276,11 @@ class WTRLAB implements Plugin.PluginBase {
           .map(id => this.tagIdMap.get(String(id)))
           .filter((name): name is string => !!name);
 
-        const allGenres = [...new Set([...genreNames, ...tagNames])];
-        if (allGenres.length > 0) {
-          novel.genres = allGenres.join(', ');
+        if (genreNames.length > 0) {
+          novel.genres = genreNames.join(', ');
+        }
+        if (tagNames.length > 0) {
+          novel.tags = tagNames.join(', ');
         }
       }
     }

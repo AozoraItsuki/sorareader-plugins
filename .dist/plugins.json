@@ -13,7 +13,7 @@
 		"name": "WTR-LAB",
 		"site": "https://wtr-lab.com/",
 		"lang": "Bahasa Indonesia",
-		"version": "1.6.1",
+		"version": "1.6.2",
 		"url": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/.js/plugins/indonesian/wtrlab.js",
 		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/public/static/src/id/wtrlab/icon.png"
 	}

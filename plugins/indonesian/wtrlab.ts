@@ -8,7 +8,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.6.2';
+  version = '1.6.3';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   baggage = '';
@@ -439,7 +439,7 @@ class WTRLAB implements Plugin.PluginBase {
     );
 
     const encKey = results.find(k => k !== null);
-    if (!encKey) throw new Error('Failed to find Encryption Key');
+    if (!encKey) encKey = 'IJAFUUxjM25hyzL2AZrn0wl7cESED6Ru';
     return encKey;
   }
 

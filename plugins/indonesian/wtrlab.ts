@@ -432,10 +432,11 @@ class WTRLAB implements Plugin.PluginBase {
     }
 
     if (!novel.summary) {
-      novel.summary =
+      novel.summary = this.resolveTemplates(
         loadedCheerio('.description').text().trim() ||
-        loadedCheerio('.desc-wrap .description').text().trim() ||
-        loadedCheerio('.lead').text().trim();
+          loadedCheerio('.desc-wrap .description').text().trim() ||
+          loadedCheerio('.lead').text().trim(),
+      );
     }
 
     if (!novel.author) {

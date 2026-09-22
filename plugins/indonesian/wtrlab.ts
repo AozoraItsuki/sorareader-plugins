@@ -10,7 +10,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.7.0';
+  version = '1.7.1';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   webStorageUtilized = true;
@@ -241,7 +241,9 @@ class WTRLAB implements Plugin.PluginBase {
 
       const novels: Plugin.NovelItem[] = (recentNovel.data ?? []).map(
         (datum: Datum) => ({
-          name: datum.serie.data.title || datum.serie.slug || '',
+          name:
+            this.resolveTemplates(datum.serie.data.title || datum.serie.slug) ||
+            '',
           cover: datum.serie.data.image,
           path:
             this.sourceLang +
@@ -277,7 +279,7 @@ class WTRLAB implements Plugin.PluginBase {
           return true;
         })
         .map((novel: SerieData) => ({
-          name: novel.data.title,
+          name: this.resolveTemplates(novel.data.title),
           cover: novel.data.image,
           path: `${this.sourceLang}serie-${novel.raw_id}/${novel.slug}`,
         }));
@@ -360,8 +362,8 @@ class WTRLAB implements Plugin.PluginBase {
 
     const novel: Plugin.SourceNovel = {
       path: novelPath,
-      name: loadedCheerio('h1.text-uppercase').text(),
-      summary: loadedCheerio('.lead').text().trim(),
+      name: this.resolveTemplates(loadedCheerio('h1.text-uppercase').text()),
+      summary: this.resolveTemplates(loadedCheerio('.lead').text().trim()),
     };
 
     let parsedNextData: NovelJson | null = null;
@@ -386,10 +388,12 @@ class WTRLAB implements Plugin.PluginBase {
       const serieData = parsedNextData?.props?.pageProps?.serie?.serie_data;
 
       if (serieData) {
-        novel.name = serieData.data?.title || '';
+        novel.name = this.resolveTemplates(serieData.data?.title || '');
         novel.cover = serieData.data?.image || '';
-        novel.summary = serieData.data?.description || '';
-        novel.author = serieData.data?.author || '';
+        novel.summary = this.resolveTemplates(
+          serieData.data?.description || '',
+        );
+        novel.author = this.resolveTemplates(serieData.data?.author || '');
         rawId = serieData.raw_id || null;
         slug = serieData.slug || null;
         chapterCount = serieData.chapter_count ?? 0;
@@ -414,10 +418,11 @@ class WTRLAB implements Plugin.PluginBase {
     }
 
     if (!novel.name) {
-      novel.name =
+      novel.name = this.resolveTemplates(
         loadedCheerio('h1.text-uppercase').text() ||
-        loadedCheerio('h1.long-title').text() ||
-        loadedCheerio('.title-wrap h1').text().trim();
+          loadedCheerio('h1.long-title').text() ||
+          loadedCheerio('.title-wrap h1').text().trim(),
+      );
     }
 
     if (!novel.cover) {
@@ -475,10 +480,12 @@ class WTRLAB implements Plugin.PluginBase {
       try {
         const finderData = await this.fetchNovelFromFinder(rawId, slug);
         if (finderData) {
-          novel.name = finderData.data?.title || '';
+          novel.name = this.resolveTemplates(finderData.data?.title || '');
           novel.cover = finderData.data?.image || '';
-          novel.summary = finderData.data?.description || '';
-          novel.author = finderData.data?.author || '';
+          novel.summary = this.resolveTemplates(
+            finderData.data?.description || '',
+          );
+          novel.author = this.resolveTemplates(finderData.data?.author || '');
           slug = finderData.slug || slug;
           chapterCount = finderData.chapter_count ?? 0;
 
@@ -599,6 +606,40 @@ class WTRLAB implements Plugin.PluginBase {
     let encKey = results.find(k => k !== null);
     if (!encKey) encKey = 'IJAFUUxjM25hyzL2AZrn0wl7cESED6Ru';
     return encKey;
+  }
+
+  /** Decode a (possibly URL-safe, possibly unpadded) base64 string to UTF-8 text. */
+  private decodeB64(b64: string): string {
+    try {
+      const normalized = b64.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = normalized.padEnd(
+        Math.ceil(normalized.length / 4) * 4,
+        '=',
+      );
+      const bin = atob(padded);
+      const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * Resolve site template strings like `%{Soul Land|RG91bHVvIERhbHU}`
+   * to their localized display title (`Soul Land`). The second part is a
+   * base64-encoded alternative/raw name (e.g. `Douluo Dalu`).
+   */
+  private resolveTemplates(input: string): string {
+    if (typeof input !== 'string' || input.indexOf('%{') === -1) return input;
+    return input.replace(
+      /%\{([^}|]*)\|([^}]*)\}/g,
+      (_match, partA: string, partB: string) => {
+        const display = (partA ?? '').trim();
+        if (display) return display;
+        const decoded = this.decodeB64(partB ?? '');
+        return decoded || partB || '';
+      },
+    );
   }
 
   /** Hash helper used to cache translated batches (avoid Google spam detection). */

@@ -1,27 +1,173 @@
 import { Plugin } from '@/types/plugin';
-import { fetchApi } from '@libs/fetch';
+import { fetchApi, FetchInit } from '@libs/fetch';
 import { FilterTypes, Filters } from '@libs/filterInputs';
 import { CheerioAPI, load as parseHTML } from 'cheerio';
 import { gcm } from '@libs/aes';
+import { storage } from '@libs/storage';
+import { NovelStatus } from '@libs/novelStatus';
 
 class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.6.5';
+  version = '1.7.0';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
+  webStorageUtilized = true;
+  imageRequestInit: Plugin.ImageRequestInit = {
+    headers: { Referer: this.site },
+  };
+
   baggage = '';
   trace = '';
   private buildId = '';
   private tagIdMap: Map<string, string> = new Map();
   private genreIdMap: Map<string, string> = new Map();
 
+  private readonly G_KEY = 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520';
+  private readonly G_URL =
+    'https://translate-pa.googleapis.com/v1/translateHtml';
+
+  // Storage keys (per-plugin namespace)
+  private readonly K_TOKENS = 'wtrlab:tokens';
+  private readonly K_BUILD = 'wtrlab:buildId';
+  private readonly K_TERMS = 'wtrlab:terms';
+  private readonly K_CHAPTERS = 'wtrlab:chapters';
+  private readonly K_READER = 'wtrlab:reader';
+  private readonly K_TR = 'wtrlab:tr';
+
+  // TTLs in milliseconds (converted to epoch expiry for storage.set)
+  private readonly TOKEN_TTL = 10 * 60 * 1000;
+  private readonly BUILD_TTL = 60 * 60 * 1000;
+  private readonly CHAPTERS_TTL = 60 * 60 * 1000;
+  private readonly READER_TTL = 30 * 24 * 60 * 60 * 1000;
+  private readonly TERMS_TTL = 365 * 24 * 60 * 60 * 1000;
+
+  private memCache: Map<string, { value: unknown; expires: number }> =
+    new Map();
+
   get headers(): Record<string, string> {
     return {
       baggage: this.baggage,
       'sentry-trace': this.trace,
     };
+  }
+
+  /** Headers used on every JSON API call: tokens + referrer (anti Cloudflare/Turnstile). */
+  private apiHeaders(referrer?: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    };
+    if (this.baggage) headers.baggage = this.baggage;
+    if (this.trace) headers['sentry-trace'] = this.trace;
+    if (referrer) headers.Referer = referrer;
+    return headers;
+  }
+
+  /** Cache-before-fetch with in-memory + persistent storage layers. */
+  private async cachedFetch<T>(
+    url: string,
+    init?: FetchInit,
+    cache?: { key?: string; ttlMs?: number },
+  ): Promise<T> {
+    const key = cache?.key ?? `f:${url}`;
+    const ttlMs = cache?.ttlMs ?? 15 * 60 * 1000;
+
+    const mem = this.memCache.get(key);
+    if (mem && mem.expires > Date.now()) return mem.value as T;
+
+    const persisted = storage.get<T>(key);
+    if (persisted !== undefined) {
+      this.memCache.set(key, { value: persisted, expires: Date.now() + ttlMs });
+      return persisted;
+    }
+
+    const res = await fetchApi(url, init);
+    const data = (await res.json()) as T;
+    this.memCache.set(key, { value: data, expires: Date.now() + ttlMs });
+    storage.set(key, data, Date.now() + ttlMs);
+    return data;
+  }
+
+  /** Fetch and cache the Sentry tokens (baggage + sentry-trace) the site expects. */
+  private async fetchTokens(force = false): Promise<void> {
+    if (!force && this.baggage && this.trace) return;
+    try {
+      const body = await fetchApi(this.site + this.sourceLang, {
+        headers: { accept: 'text/html' },
+      }).then(res => res.text());
+      const $ = parseHTML(body);
+
+      const baggage = $('meta[name="baggage"]').attr('content') ?? '';
+      const trace = $('meta[name="sentry-trace"]').attr('content') ?? '';
+
+      if (baggage && trace) {
+        this.baggage = baggage;
+        this.trace = trace;
+        storage.set(
+          this.K_TOKENS,
+          { baggage, trace },
+          Date.now() + this.TOKEN_TTL,
+        );
+      }
+    } catch {
+      // keep whatever tokens we already have
+    }
+  }
+
+  /** Make sure tokens exist (memory -> storage -> fresh fetch), never blocks on empty. */
+  private async ensureTokens(): Promise<void> {
+    if (this.baggage && this.trace) return;
+    const cached = storage.get<{ baggage: string; trace: string }>(
+      this.K_TOKENS,
+    );
+    if (cached?.baggage && cached?.trace) {
+      this.baggage = cached.baggage;
+      this.trace = cached.trace;
+      return;
+    }
+    await this.fetchTokens();
+  }
+
+  /** JS buildId used by the _next/data API (cached in memory + storage). */
+  private async getBuildId(force = false): Promise<string> {
+    if (this.buildId && !force) return this.buildId;
+    if (!this.buildId) {
+      const cached = storage.get<string>(this.K_BUILD);
+      if (cached) {
+        this.buildId = cached;
+        return cached;
+      }
+    }
+
+    const finderPage = await fetchApi(this.site + 'en/novel-finder').then(res =>
+      res.text(),
+    );
+    const finderCheerio = parseHTML(finderPage);
+    const nextData = finderCheerio('#__NEXT_DATA__').html();
+    if (!nextData) {
+      throw new Error('Could not find __NEXT_DATA__ on novel finder page');
+    }
+    this.buildId = JSON.parse(nextData).buildId;
+    storage.set(this.K_BUILD, this.buildId, Date.now() + this.BUILD_TTL);
+    return this.buildId;
+  }
+
+  /** Full status mapping verified against the site (0..3). */
+  private statusLabel(status: number | null | undefined): string {
+    switch (status) {
+      case 0:
+        return NovelStatus.Ongoing;
+      case 1:
+        return NovelStatus.Completed;
+      case 2:
+        return NovelStatus.OnHiatus;
+      case 3:
+        return NovelStatus.Cancelled;
+      default:
+        return NovelStatus.Unknown;
+    }
   }
 
   async popularNovels(
@@ -31,8 +177,6 @@ class WTRLAB implements Plugin.PluginBase {
       filters,
     }: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
-    let link = this.site + this.sourceLang + 'novel-list?';
-
     const params = new URLSearchParams();
     params.append('orderBy', filters.orderBy.value);
     params.append('order', filters.order.value);
@@ -85,17 +229,17 @@ class WTRLAB implements Plugin.PluginBase {
     }
 
     if (showLatestNovels) {
+      // Home "recent" endpoint is Cloudflare-guarded: requires tokens.
+      await this.ensureTokens();
       const response = await fetchApi(this.site + 'api/home/recent', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: this.apiHeaders(),
         body: JSON.stringify({ page: page }),
       });
 
       const recentNovel: JsonNovel = await response.json();
 
-      const novels: Plugin.NovelItem[] = recentNovel.data.map(
+      const novels: Plugin.NovelItem[] = (recentNovel.data ?? []).map(
         (datum: Datum) => ({
           name: datum.serie.data.title || datum.serie.slug || '',
           cover: datum.serie.data.image,
@@ -110,38 +254,29 @@ class WTRLAB implements Plugin.PluginBase {
 
       return novels;
     } else {
-      if (!this.buildId) {
-        const finderPage = await fetchApi(this.site + 'en/novel-finder').then(
-          res => res.text(),
-        );
-        const finderCheerio = parseHTML(finderPage);
-        const nextData = finderCheerio('#__NEXT_DATA__').html();
-        if (!nextData) {
-          throw new Error('Could not find __NEXT_DATA__ on novel finder page');
-        }
-        this.buildId = JSON.parse(nextData).buildId;
-      }
+      const buildId = await this.getBuildId();
+      const link = `${this.site}_next/data/${buildId}/en/novel-finder.json?${params.toString()}`;
 
-      link = `${this.site}_next/data/${this.buildId}/en/novel-finder.json?${params.toString()}`;
-
-      const response = await fetchApi(link);
-      const json = await response.json();
+      const json = await this.cachedFetch<FinderJson>(link, undefined, {
+        key: `list:${page}:${params.toString()}`,
+        ttlMs: 5 * 60 * 1000,
+      });
 
       if (this.tagIdMap.size === 0 && json.pageProps?.tags?.ungrouped) {
         this.populateTagMap(json);
       }
 
-      const seenIds = new Set();
+      const seenIds = new Set<number>();
 
       const novels: Plugin.NovelItem[] = json.pageProps.series
-        .filter((novel: Datum) => {
+        .filter((novel: SerieData) => {
           if (seenIds.has(novel.raw_id)) {
             return false;
           }
           seenIds.add(novel.raw_id);
           return true;
         })
-        .map((novel: Datum) => ({
+        .map((novel: SerieData) => ({
           name: novel.data.title,
           cover: novel.data.image,
           path: `${this.sourceLang}serie-${novel.raw_id}/${novel.slug}`,
@@ -151,14 +286,7 @@ class WTRLAB implements Plugin.PluginBase {
     }
   }
 
-  private populateTagMap(json: {
-    pageProps?: {
-      tags?: {
-        ungrouped?: { value: number; label: string }[];
-        groups?: { id: number; name: string }[];
-      };
-    };
-  }): void {
+  private populateTagMap(json: FinderJson): void {
     const ungrouped = json.pageProps?.tags?.ungrouped ?? [];
     const groups = json.pageProps?.tags?.groups ?? [];
 
@@ -172,55 +300,29 @@ class WTRLAB implements Plugin.PluginBase {
   async ensureTagMap(): Promise<void> {
     if (this.tagIdMap.size > 0) return;
 
-    if (!this.buildId) {
-      const finderPage = await fetchApi(this.site + 'en/novel-finder').then(
-        res => res.text(),
-      );
-      const finderCheerio = parseHTML(finderPage);
-      const nextData = finderCheerio('#__NEXT_DATA__').html();
-      if (!nextData)
-        throw new Error('Could not find __NEXT_DATA__ on novel finder page');
-      this.buildId = JSON.parse(nextData).buildId;
-    }
-
-    const json = await fetchApi(
-      `${this.site}_next/data/${this.buildId}/en/novel-finder.json`,
-    ).then(r => r.json());
+    const buildId = await this.getBuildId();
+    const json = await this.cachedFetch<FinderJson>(
+      `${this.site}_next/data/${buildId}/en/novel-finder.json`,
+      undefined,
+      { key: `tags:${buildId}`, ttlMs: 30 * 60 * 1000 },
+    );
 
     this.populateTagMap(json);
-  }
-
-  async fetchTokens() {
-    const body = await fetchApi(this.site + this.sourceLang).then(res =>
-      res.text(),
-    );
-    const $ = parseHTML(body);
-
-    this.baggage = $('meta[name="baggage"]').attr('content') ?? '';
-    this.trace = $('meta[name="sentry-trace"]').attr('content') ?? '';
   }
 
   private async fetchNovelFromFinder(
     rawId: number,
     slug: string,
   ): Promise<SerieData | null> {
-    if (!this.buildId) {
-      const finderPage = await fetchApi(this.site + 'en/novel-finder').then(
-        res => res.text(),
-      );
-      const finderCheerio = parseHTML(finderPage);
-      const nextData = finderCheerio('#__NEXT_DATA__').html();
-      if (!nextData) return null;
-      this.buildId = JSON.parse(nextData).buildId;
-    }
+    const buildId = await this.getBuildId().catch(() => '');
 
     const searchText = slug.replace(/-/g, ' ');
     const params = new URLSearchParams({ text: searchText, page: '1' });
-    const json = await fetchApi(
-      `${this.site}_next/data/${this.buildId}/en/novel-finder.json?${params}`,
-    )
-      .then(r => r.json())
-      .catch(() => null);
+    const json = await this.cachedFetch<FinderJson>(
+      `${this.site}_next/data/${buildId}/en/novel-finder.json?${params}`,
+      undefined,
+      { key: `finder:${rawId}`, ttlMs: 30 * 60 * 1000 },
+    ).catch(() => null);
 
     if (!Array.isArray(json?.pageProps?.series)) return null;
 
@@ -240,6 +342,11 @@ class WTRLAB implements Plugin.PluginBase {
     if (baggage && trace) {
       this.baggage = baggage;
       this.trace = trace;
+      storage.set(
+        this.K_TOKENS,
+        { baggage, trace },
+        Date.now() + this.TOKEN_TTL,
+      );
     } else if (!this.baggage || !this.trace) {
       await this.fetchTokens();
     }
@@ -287,16 +394,7 @@ class WTRLAB implements Plugin.PluginBase {
         slug = serieData.slug || null;
         chapterCount = serieData.chapter_count ?? 0;
 
-        switch (serieData.status) {
-          case 0:
-            novel.status = 'Ongoing';
-            break;
-          case 1:
-            novel.status = 'Completed';
-            break;
-          default:
-            novel.status = 'Unknown';
-        }
+        novel.status = this.statusLabel(serieData.status);
 
         const genreNames = (serieData.genres ?? [])
           .map(id => this.genreIdMap.get(String(id)))
@@ -384,16 +482,7 @@ class WTRLAB implements Plugin.PluginBase {
           slug = finderData.slug || slug;
           chapterCount = finderData.chapter_count ?? 0;
 
-          switch (finderData.status) {
-            case 0:
-              novel.status = 'Ongoing';
-              break;
-            case 1:
-              novel.status = 'Completed';
-              break;
-            default:
-              novel.status = 'Unknown';
-          }
+          novel.status = this.statusLabel(finderData.status);
 
           const genreNames = (finderData.genres ?? [])
             .map(id => this.genreIdMap.get(String(id)))
@@ -512,30 +601,78 @@ class WTRLAB implements Plugin.PluginBase {
     return encKey;
   }
 
+  /** Hash helper used to cache translated batches (avoid Google spam detection). */
+  private simpleHash(input: string): string {
+    let hash = 0;
+    for (let i = 0; i < input.length; i++) {
+      hash = (hash << 5) - hash + input.charCodeAt(i);
+      hash |= 0;
+    }
+    return (hash >>> 0).toString(36);
+  }
+
   async translate(data: string[]): Promise<string[]> {
-    const response = await fetchApi(
-      'https://translate-pa.googleapis.com/v1/translateHtml',
-      {
-        'credentials': 'omit',
-        'headers': {
-          'content-type': 'application/json+protobuf',
-          'X-Goog-API-Key': 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520',
-        },
-        'referrer': 'https://wtr-lab.com/',
-        'body': `[[${JSON.stringify(data)},"auto","id"],"te_lib"]`,
-        'method': 'POST',
+    const cacheKey = `${this.K_TR}:${this.simpleHash(data.join('\u0001'))}`;
+    const cached = storage.get<string[]>(cacheKey);
+    if (cached) return cached;
+
+    const response = await fetchApi(this.G_URL, {
+      'credentials': 'omit',
+      'headers': {
+        'content-type': 'application/json+protobuf',
+        'X-Goog-API-Key': this.G_KEY,
       },
-    );
+      'referrer': 'https://wtr-lab.com/',
+      'body': `[[${JSON.stringify(data)},"auto","id"],"te_lib"]`,
+      'method': 'POST',
+    });
     const translated = await response.json();
     const out = translated && translated[0] ? translated[0] : [];
+    storage.set(cacheKey, out, Date.now() + this.READER_TTL);
     return out as string[];
+  }
+
+  /**
+   * Resolve glossary terms for a chapter.
+   * Chosen translation per RAW term is persisted, so a character name picked once
+   * stays identical across every chapter (raw = the candidate containing CJK, or
+   * the first candidate; default choice = earliest/language-matching candidate).
+   */
+  private resolveTerms(terms: string[][] | undefined): string[] {
+    const dict: string[] = [];
+    if (!terms?.length) return dict;
+
+    const saved = storage.get<Record<string, string>>(this.K_TERMS) ?? {};
+    let dirty = false;
+
+    terms.forEach((row, i) => {
+      const cands = (row ?? []).filter(
+        c => typeof c === 'string' && c.trim() !== '',
+      );
+      if (!cands.length) return;
+
+      const rawKey = cands.find(c => /[\u3400-\u9FFF]/.test(c)) ?? cands[0];
+
+      let chosen = saved[rawKey];
+      if (!chosen || !cands.includes(chosen)) {
+        chosen = cands[0];
+        saved[rawKey] = chosen;
+        dirty = true;
+      }
+      dict[i] = chosen;
+    });
+
+    if (dirty) {
+      storage.set(this.K_TERMS, saved, Date.now() + this.TERMS_TTL);
+    }
+    return dict;
   }
 
   async parseChapter(chapterPath: string): Promise<string> {
     const url = this.site + chapterPath;
     let rawId: number | null = null;
     let chapterNo: number | null = null;
-    let loadedCheerio = null;
+    let loadedCheerio: CheerioAPI | null = null;
 
     const urlMatch = chapterPath.match(/serie-(\d+)\/[^/]+\/chapter-(\d+)/);
     if (urlMatch) {
@@ -547,6 +684,20 @@ class WTRLAB implements Plugin.PluginBase {
       const body = await fetchApi(url).then(res => res.text());
 
       loadedCheerio = parseHTML(body);
+
+      // Steal fresh tokens from the chapter page and persist them.
+      const baggage = loadedCheerio('meta[name="baggage"]').attr('content');
+      const trace = loadedCheerio('meta[name="sentry-trace"]').attr('content');
+      if (baggage && trace) {
+        this.baggage = baggage;
+        this.trace = trace;
+        storage.set(
+          this.K_TOKENS,
+          { baggage, trace },
+          Date.now() + this.TOKEN_TTL,
+        );
+      }
+
       const chapterJson = loadedCheerio('#__NEXT_DATA__').html() + '';
       const jsonData: NovelJson = JSON.parse(chapterJson);
 
@@ -560,6 +711,14 @@ class WTRLAB implements Plugin.PluginBase {
       throw new Error(errorMsg);
     }
 
+    // Cache-before-fetch: full rendered HTML per chapter (30 days). A chapter
+    // already fetched is never requested again -> avoids CF/rate-limit hits.
+    const htmlCacheKey = `${this.K_READER}:${rawId}:${chapterNo}`;
+    const cachedHtml = storage.get<string>(htmlCacheKey);
+    if (cachedHtml) return cachedHtml;
+
+    await this.ensureTokens();
+
     const translationTypes = ['webplus'];
 
     let eLog = '';
@@ -568,11 +727,7 @@ class WTRLAB implements Plugin.PluginBase {
     for (const type of translationTypes) {
       const apiResponse = await fetchApi(`${this.site}api/reader/get`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-        referrer: url,
+        headers: this.apiHeaders(url),
         body: JSON.stringify({
           translate: type,
           language: this.sourceLang.replace('/', ''),
@@ -593,12 +748,24 @@ class WTRLAB implements Plugin.PluginBase {
         break;
       }
     }
-    if (parsedJson.success == false) {
+    if (parsedJson?.success == false) {
       const errorMsg = parsedJson.message;
       console.error(errorMsg);
       throw new Error(errorMsg);
     }
-    let chapterContent = parsedJson.data.data.body;
+
+    const body: unknown = parsedJson?.data?.data?.body;
+    if (typeof body !== 'string' || !body) {
+      const errMsg =
+        'Empty or missing chapter body from API response. The site may have blocked the request — try again later.';
+      console.error(errMsg, {
+        success: parsedJson?.success,
+        apiError: parsedJson?.error,
+      });
+      return `<p style="color:darkred;">${errMsg}</p>`;
+    }
+
+    let chapterContent: string | string[] = body;
     const chapterGlossary: ChapterContent['glossary_data'] | undefined =
       parsedJson?.data?.data?.glossary_data;
 
@@ -614,21 +781,25 @@ class WTRLAB implements Plugin.PluginBase {
         loadedCheerio = parseHTML(body);
       }
       const encKey = await this.getKey(loadedCheerio);
-      chapterContent = await this.decrypt(chapterContent, encKey);
-      if (Object.prototype.hasOwnProperty.call(chapterContent, 'error')) {
-        htmlString += `<p>${chapterContent.error.toString()}</p>`;
+      const decrypted = await this.decrypt(chapterContent.toString(), encKey);
+      if (Object.prototype.hasOwnProperty.call(decrypted, 'error')) {
+        htmlString += `<p>${(decrypted as { error: string }).error}</p>`;
         return htmlString;
       }
-      chapterContent = await this.translate(chapterContent);
+      const paragraphs =
+        typeof decrypted === 'string' ? [decrypted] : (decrypted as string[]);
+      chapterContent = await this.translate(paragraphs);
     }
 
     if (eLog !== '') {
       htmlString += `<p style="color:darkred;">${eLog}</p>`;
     }
 
-    const dictionary = chapterGlossary?.terms?.map(t => t[0]) || [];
+    const dictionary = this.resolveTerms(chapterGlossary?.terms);
 
-    for (let text of chapterContent) {
+    for (let text of Array.isArray(chapterContent)
+      ? (chapterContent as string[])
+      : [chapterContent as string]) {
       if (dictionary.length > 0) {
         text = text.replaceAll(
           /(?:wtr-lab\s+)?※([0-9]+)[⛬〓]/g,
@@ -636,6 +807,10 @@ class WTRLAB implements Plugin.PluginBase {
         );
       }
       htmlString += `<p>${text}</p>`;
+    }
+
+    if (htmlString) {
+      storage.set(htmlCacheKey, htmlString, Date.now() + this.READER_TTL);
     }
 
     return htmlString;
@@ -646,6 +821,11 @@ class WTRLAB implements Plugin.PluginBase {
     totalChapters: number,
     slug: string,
   ): Promise<Plugin.ChapterItem[]> {
+    // Cache-before-fetch: chapter list per novel (60 min).
+    const cacheKey = `${this.K_CHAPTERS}:${rawId}`;
+    const cached = storage.get<Plugin.ChapterItem[]>(cacheKey);
+    if (cached) return cached;
+
     const batchSize = 250;
     const batches: Array<{ start: number; end: number }> = [];
 
@@ -683,9 +863,15 @@ class WTRLAB implements Plugin.PluginBase {
       }),
     );
 
-    return results
+    const chapters = results
       .flat()
       .sort((a, b) => (a.chapterNumber || 0) - (b.chapterNumber || 0));
+
+    if (chapters.length > 0) {
+      storage.set(cacheKey, chapters, Date.now() + this.CHAPTERS_TTL);
+    }
+
+    return chapters;
   }
 
   async searchNovels(
@@ -890,6 +1076,18 @@ class WTRLAB implements Plugin.PluginBase {
     },
   } satisfies Filters;
 }
+
+type FinderJson = {
+  props: {
+    pageProps: {
+      series: SerieData[];
+      tags?: {
+        ungrouped?: { value: number; label: string }[];
+        groups?: { id: number; name: string }[];
+      };
+    };
+  };
+};
 
 type NovelJson = {
   props: Props;

@@ -710,7 +710,16 @@ class WTRLAB implements Plugin.PluginBase {
     return dict;
   }
 
+  private resolveChapterImageUrl(url: string): string {
+    if (/^https?:\/\//i.test(url)) return url;
+    // Legacy importer stored paths like `rss./web/novel/images/...`;
+    // strip the dead `rss.` prefix and resolve against the site root.
+    const cleaned = url.replace(/^rss\./i, '').replace(/^\.\//, '');
+    return this.site + cleaned.replace(/^\/+/, '');
+  }
+
   async parseChapter(chapterPath: string): Promise<string> {
+    const CHAPTER_IMG_TOKEN = (index: number) => `__WTRLABIMG${index}__`;
     const url = this.site + chapterPath;
     let rawId: number | null = null;
     let chapterNo: number | null = null;
@@ -813,6 +822,14 @@ class WTRLAB implements Plugin.PluginBase {
 
     let htmlString = '';
 
+    // Slots for [img] markers extracted before translation (see below);
+    // declared here so the render loop can splice the <img> tags back.
+    const illustrationSlots: Array<{
+      src: string;
+      width?: number;
+      height?: number;
+    }> = [];
+
     if (
       chapterContent.toString().startsWith('arr:') ||
       chapterContent.toString().startsWith('str:')
@@ -830,14 +847,50 @@ class WTRLAB implements Plugin.PluginBase {
       }
       const paragraphs =
         typeof decrypted === 'string' ? [decrypted] : (decrypted as string[]);
-      chapterContent = await this.translate(paragraphs);
+      // Illustration markers ([img=W,H]url[/img]) would be mangled by Google
+      // translateHtml, so pull them out into ASCII tokens first, translate the
+      // text, then splice <img> tags back at the same position when rendering.
+      // NOTE: legacy `rss./web/...` image paths no longer resolve on the site
+      // (404 on every host/proxy variant) — markup is emitted anyway so they
+      // appear automatically if the server restores them.
+      const translatable = paragraphs.map(paragraph =>
+        paragraph.replace(
+          /\[img(?:=(\d+),(\d+))?\]([^\[]+?)\[\/img\]/g,
+          (
+            _marker: string,
+            width: string | undefined,
+            height: string | undefined,
+            imageUrl: string,
+          ) => {
+            illustrationSlots.push({
+              src: this.resolveChapterImageUrl(imageUrl.trim()),
+              width: width ? parseInt(width, 10) : undefined,
+              height: height ? parseInt(height, 10) : undefined,
+            });
+            return CHAPTER_IMG_TOKEN(illustrationSlots.length - 1);
+          },
+        ),
+      );
+      chapterContent = await this.translate(translatable);
     }
+
+    // Chapter-level illustrations served as absolute CDN URLs
+    // (data.images) — proven loadable without referer; render first.
+    const chapterImages: unknown = parsedJson?.data?.data?.images;
 
     if (eLog !== '') {
       htmlString += `<p style="color:darkred;">${eLog}</p>`;
     }
 
     const dictionary = this.resolveTerms(chapterGlossary?.terms);
+
+    if (Array.isArray(chapterImages)) {
+      for (const imageSrc of chapterImages) {
+        if (typeof imageSrc === 'string' && imageSrc.length > 0) {
+          htmlString += `<p><img src="${imageSrc}" loading="lazy" alt="illustration" /></p>`;
+        }
+      }
+    }
 
     for (let text of Array.isArray(chapterContent)
       ? (chapterContent as string[])
@@ -846,6 +899,20 @@ class WTRLAB implements Plugin.PluginBase {
         text = text.replaceAll(
           /(?:wtr-lab\s+)?※([0-9]+)[⛬〓]/g,
           (m: string, index: string) => dictionary[parseInt(index)] || m,
+        );
+      }
+      if (illustrationSlots.length > 0) {
+        // Tolerant restore: translators may inject spaces or alter case.
+        text = text.replace(
+          /__WTRLABIMG\s*(\d+)\s__/gi,
+          (token: string, index: string) => {
+            const slot = illustrationSlots[parseInt(index, 10)];
+            if (!slot) return token;
+            const dims =
+              (slot.width ? ` width="${slot.width}"` : '') +
+              (slot.height ? ` height="${slot.height}"` : '');
+            return `<img src="${slot.src}" loading="lazy" alt="illustration"${dims} />`;
+          },
         );
       }
       htmlString += `<p>${text}</p>`;

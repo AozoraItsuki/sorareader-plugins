@@ -10,7 +10,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.7.2';
+  version = '1.7.3';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   webStorageUtilized = true;
@@ -830,6 +830,20 @@ class WTRLAB implements Plugin.PluginBase {
       height?: number;
     }> = [];
 
+    // Chapter-level illustrations (data.images) are absolute CDN URLs the site
+    // serves for this chapter. The inline `[image]` placeholder in the body
+    // carries no URL of its own — it consumes these in document order, so the
+    // illustration lands where the author put it rather than being hoisted to
+    // the top of the chapter. Anything left over is appended at the end.
+    const chapterImages: unknown = parsedJson?.data?.data?.images;
+    const chapterImageUrls: string[] = Array.isArray(chapterImages)
+      ? chapterImages.filter(
+          (value): value is string =>
+            typeof value === 'string' && value.trim().length > 0,
+        )
+      : [];
+    let chapterImageCursor = 0;
+
     if (
       chapterContent.toString().startsWith('arr:') ||
       chapterContent.toString().startsWith('str:')
@@ -847,14 +861,15 @@ class WTRLAB implements Plugin.PluginBase {
       }
       const paragraphs =
         typeof decrypted === 'string' ? [decrypted] : (decrypted as string[]);
-      // Illustration markers ([img=W,H]url[/img]) would be mangled by Google
-      // translateHtml, so pull them out into ASCII tokens first, translate the
-      // text, then splice <img> tags back at the same position when rendering.
-      // NOTE: legacy `rss./web/...` image paths no longer resolve on the site
-      // (404 on every host/proxy variant) — markup is emitted anyway so they
-      // appear automatically if the server restores them.
-      const translatable = paragraphs.map(paragraph =>
-        paragraph.replace(
+      // Illustration markers would be mangled by Google translateHtml, so pull
+      // them out into ASCII tokens first, translate the text, then splice <img>
+      // tags back at the same position when rendering.
+      const translatable = paragraphs.map(paragraph => {
+        // Self-contained form: [img=W,H]url[/img] — the URL is in the marker.
+        // NOTE: legacy `rss./web/...` paths no longer resolve on the site
+        // (404 on every host/proxy variant), but markup is still emitted so
+        // they appear automatically if the server restores them.
+        const withInlineUrl = paragraph.replace(
           /\[img(?:=(\d+),(\d+))?\]([^\[]+?)\[\/img\]/g,
           (
             _marker: string,
@@ -869,28 +884,40 @@ class WTRLAB implements Plugin.PluginBase {
             });
             return CHAPTER_IMG_TOKEN(illustrationSlots.length - 1);
           },
-        ),
-      );
+        );
+
+        // Bare placeholder form: [image] / [img] / [gambar] / [图片] with no
+        // URL. This is what the site actually emits — the file lives in
+        // data.images, so take the next unused one in document order. When the
+        // API returns none, drop the marker rather than leaking a literal
+        // "[image]" into the translated prose.
+        return withInlineUrl.replace(
+          /\[(?:image|img|gambar|图片|圖片|画像)(?:=(\d+),(\d+))?\]/gi,
+          (
+            _marker: string,
+            width: string | undefined,
+            height: string | undefined,
+          ) => {
+            const src = chapterImageUrls[chapterImageCursor];
+            if (src === undefined) return '';
+            chapterImageCursor += 1;
+            illustrationSlots.push({
+              src: this.resolveChapterImageUrl(src.trim()),
+              width: width ? parseInt(width, 10) : undefined,
+              height: height ? parseInt(height, 10) : undefined,
+            });
+            return CHAPTER_IMG_TOKEN(illustrationSlots.length - 1);
+          },
+        );
+      });
       chapterContent = await this.translate(translatable);
     }
-
-    // Chapter-level illustrations served as absolute CDN URLs
-    // (data.images) — proven loadable without referer; render first.
-    const chapterImages: unknown = parsedJson?.data?.data?.images;
 
     if (eLog !== '') {
       htmlString += `<p style="color:darkred;">${eLog}</p>`;
     }
 
     const dictionary = this.resolveTerms(chapterGlossary?.terms);
-
-    if (Array.isArray(chapterImages)) {
-      for (const imageSrc of chapterImages) {
-        if (typeof imageSrc === 'string' && imageSrc.length > 0) {
-          htmlString += `<p><img src="${imageSrc}" loading="lazy" alt="illustration" /></p>`;
-        }
-      }
-    }
 
     for (let text of Array.isArray(chapterContent)
       ? (chapterContent as string[])
@@ -904,7 +931,7 @@ class WTRLAB implements Plugin.PluginBase {
       if (illustrationSlots.length > 0) {
         // Tolerant restore: translators may inject spaces or alter case.
         text = text.replace(
-          /__WTRLABIMG\s*(\d+)\s__/gi,
+          /__WTRLABIMG\s*(\d+)\s*__/gi,
           (token: string, index: string) => {
             const slot = illustrationSlots[parseInt(index, 10)];
             if (!slot) return token;
@@ -916,6 +943,12 @@ class WTRLAB implements Plugin.PluginBase {
         );
       }
       htmlString += `<p>${text}</p>`;
+    }
+
+    // Images the body never placed with a marker would otherwise be dropped;
+    // append them so no illustration is silently lost.
+    for (const leftover of chapterImageUrls.slice(chapterImageCursor)) {
+      htmlString += `<p><img src="${this.resolveChapterImageUrl(leftover.trim())}" loading="lazy" alt="illustration" /></p>`;
     }
 
     if (htmlString) {

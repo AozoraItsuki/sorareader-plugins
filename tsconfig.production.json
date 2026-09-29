@@ -30,6 +30,7 @@
     "module": "CommonJS" /* Specify what module code is generated. */,
     // "rootDir": "./",                                  /* Specify the root folder within your source files. */
     "moduleResolution": "node10" /* Specify how TypeScript looks up a file from a given module specifier. */,
+    "rootDir": "./plugins" /* Pin the emit root so output lands at .js/plugins/<lang>/<plugin>.js. Without this, TypeScript infers rootDir from the common source directory, and a single stray input (e.g. dist/ picked up via allowJs) silently shifts every output path and the manifest build reads stale artifacts. */,
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
@@ -123,6 +124,8 @@
     ".husky/**",
     "node_modules/**",
     "./src/**",
-    "./plugins/multisrc/*"
+    "./plugins/multisrc/*",
+    "./server/**",
+    "./dist/**"
   ]
 }

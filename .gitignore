@@ -13,3 +13,16 @@ total.svg
 src/plugins/index.ts
 .history
 broken-sites-report.json
+
+# web playground build output (npm run build:web)
+dist
+
+# persisted playground settings (npm start / npm run dev:start)
+.cache
+
+# stray tsc output: if a non-plugin dir ever leaks into the production program,
+# it lands here instead of .js/plugins/<lang>/ and the manifest would read stale
+# artifacts. tsconfig.production.json pins rootDir to make that a hard error.
+.js/plugins/server/
+.js/plugins/plugins/
+.js/plugins/dist/

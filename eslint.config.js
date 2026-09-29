@@ -197,6 +197,18 @@ export default tseslint.config(
     },
   },
   {
+    // The server core leans on TypeScript *type* globals such as
+    // `NodeJS.ErrnoException` and `RequestInit`. The base `no-undef` rule has no
+    // type information, so it cannot tell those apart from real runtime globals
+    // and reports them as undefined. For TypeScript sources `no-undef` is
+    // redundant anyway: `tsc` already reports `Cannot find name 'X'` with the
+    // correct scope, and it is the gate this directory is verified against.
+    files: ['server/**/*.ts', 'server/**/*.tsx'],
+    rules: {
+      'no-undef': 'off',
+    },
+  },
+  {
     files: ['**/fictioneer/custom/*/*.js'],
     rules: {
       'no-undef': 'off',

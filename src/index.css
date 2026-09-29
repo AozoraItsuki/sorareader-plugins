@@ -3,6 +3,8 @@
 @import '@fontsource/geist-sans/index.css';
 @import '@fontsource/geist-mono/index.css';
 
+@plugin '@tailwindcss/typography';
+
 @custom-variant dark (&:is(.dark *));
 
 :root {

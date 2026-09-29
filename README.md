@@ -34,6 +34,20 @@ npm run dev:start
 
 Open [localhost:3000](http://localhost:3000) to test plugins interactively. See the [testing guide](./docs/website-tutorial.md) for details.
 
+### Production build
+
+The dev server runs through Vite. To serve a production bundle without it:
+
+```bash
+npm run build:web   # writes dist/client and dist/ssr
+npm start           # plain Node server, no Vite
+```
+
+`npm run preview` builds and serves in one step. Both accept `--port` and
+`--host`, and the server prints every reachable address on startup, including
+the `local network` address for phones and `10.0.2.2` for the Android emulator.
+See the [testing guide](./docs/website-tutorial.md#choosing-an-address).
+
 ### Mobile App
 
 **From GitHub (Automated):**

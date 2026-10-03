@@ -128,11 +128,104 @@
   --color-outline: var(--outline);
 }
 
+/*
+ * Safe-area utilities.
+ *
+ * `env(safe-area-inset-*)` only resolves to a non-zero value when the page is
+ * rendered with `viewport-fit=cover` (see the viewport meta in index.html);
+ * without it every inset below is a hard 0px.
+ *
+ * These utilities ADD their inset to an existing axis padding instead of
+ * replacing it: `calc(<inset> + var(--safe-*-base, 0px))`. Keep the base
+ * padding on a child element (or in the `--safe-*-base` hook) so the two
+ * stack rather than collide, since two declarations of `padding-top` in
+ * different rules would otherwise overwrite each other.
+ */
+@utility pt-safe {
+  padding-top: calc(env(safe-area-inset-top, 0px) + var(--safe-pt-base, 0px));
+}
+
+@utility pb-safe {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--safe-pb-base, 0px));
+}
+
+/* Bottom safe area plus a comfortable minimum, for the strip above the iOS
+   home indicator / Android gesture bar. */
+@utility pb-safe-nav {
+  padding-bottom: calc(
+    env(safe-area-inset-bottom, 0px) + max(1rem, var(--safe-pb-nav-base, 0px))
+  );
+}
+
+@utility pl-safe {
+  padding-left: calc(env(safe-area-inset-left, 0px) + var(--safe-pl-base, 0px));
+}
+
+@utility pr-safe {
+  padding-right: calc(env(safe-area-inset-right, 0px) + var(--safe-pr-base, 0px));
+}
+
+@utility px-safe {
+  padding-left: calc(env(safe-area-inset-left, 0px) + var(--safe-px-base, 0px));
+  padding-right: calc(env(safe-area-inset-right, 0px) + var(--safe-px-base, 0px));
+}
+
+/* Long unbroken strings (URLs, base64, CJK runs) inside plugin-rendered HTML
+   must break instead of stretching the scroll container. Layout only. */
+@utility break-anywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
   body {
     @apply bg-background text-foreground font-sans;
+  }
+  /* Also stops long tokens in plugin-rendered chapter HTML from widening the
+     document. */
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+}
+
+/*
+ * `dvh` fallback for the full-height shells.
+ *
+ * The shells use `h-dvh` alone on purpose. Pairing it with `min-h-screen`
+ * looks like a free fallback but is not: `min-height: 100vh` is larger than
+ * `height: 100dvh` whenever the mobile URL bar is expanded, and min-height
+ * wins, so the shell would snap back to 100vh and reintroduce the overflow
+ * that `dvh` exists to prevent. An explicit `@supports` fallback gives real
+ * old-WebView support without fighting on modern browsers.
+ */
+@supports not (height: 100dvh) {
+  .h-dvh {
+    height: 100vh;
+  }
+}
+
+@layer components {
+  /*
+   * Layout guards for plugin-rendered chapter HTML. Every selector is wrapped in
+   * `:where()` so specificity stays at 0 and a plugin's own unscoped customCSS
+   * still wins where it deliberately styles something — this only stops content
+   * from overflowing the scroll container by accident.
+   */
+  [data-slot='chapter-prose'] :where(img, video, svg, iframe, table, pre) {
+    max-width: 100%;
+  }
+
+  [data-slot='chapter-prose'] :where(table) {
+    display: block;
+    overflow-x: auto;
+  }
+
+  [data-slot='chapter-prose'] :where(p, li, dd, dt, h1, h2, h3, h4, h5, h6) {
+    overflow-wrap: anywhere;
   }
 }

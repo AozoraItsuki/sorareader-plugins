@@ -8,7 +8,7 @@ function App() {
   useTheme();
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="flex h-dvh min-w-0 flex-col overflow-hidden bg-background">
       <TooltipProvider>
         <Toaster position="bottom-right" />
         <Home />

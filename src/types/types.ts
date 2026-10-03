@@ -2,17 +2,10 @@ import { Plugin } from '@/types/plugin';
 
 export type PluginList = Record<string, Plugin.PluginItem[]>;
 
-export enum FetchMode {
-  PROXY,
-  NODE_FETCH,
-  CURL,
-}
-
-export type ServerSetting = {
-  CLIENT_HOST: string;
-  fetchMode: FetchMode;
-  cookies?: string;
-  disAllowedRequestHeaders: string[];
-  disAllowResponseHeaders: string[];
-  useUserAgent: boolean;
-};
+/**
+ * `FetchMode` and `ServerSetting` live in the server core so that the settings
+ * store, the proxy and the settings UI all share one definition. They are
+ * re-exported here because this module is the one the browser bundle imports.
+ */
+export { FetchMode } from '../../server/types';
+export type { ServerSetting } from '../../server/types';

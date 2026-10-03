@@ -54,8 +54,10 @@ export function ExcludableCheckboxFilter({
   };
 
   return (
-    <div className="space-y-3">
-      <Label className="text-sm font-medium">{filter.filter.label}</Label>
+    <div className="min-w-0 space-y-3">
+      <Label className="break-anywhere text-sm font-medium">
+        {filter.filter.label}
+      </Label>
       <div className="space-y-2">
         {filter.filter.options.map(option => {
           const state = getState(option.value);
@@ -64,16 +66,18 @@ export function ExcludableCheckboxFilter({
               key={option.value}
               type="button"
               onClick={() => toggleOption(option.value)}
-              className="flex items-center justify-between w-full px-3 py-2 text-sm rounded-md border border-border hover:bg-muted/50 transition-colors"
+              className="flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-left text-sm transition-colors pointer-coarse:min-h-11 hover:bg-muted/50"
             >
-              <span className="text-foreground">{option.label}</span>
+              <span className="min-w-0 break-anywhere text-foreground">
+                {option.label}
+              </span>
               {state === 'included' && (
-                <Badge variant="default" className="text-xs">
+                <Badge variant="default" className="shrink-0 text-xs">
                   Include
                 </Badge>
               )}
               {state === 'excluded' && (
-                <Badge variant="destructive" className="text-xs">
+                <Badge variant="destructive" className="shrink-0 text-xs">
                   Exclude
                 </Badge>
               )}

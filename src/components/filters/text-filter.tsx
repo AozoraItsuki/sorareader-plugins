@@ -15,8 +15,11 @@ type TextFilterProps = {
 
 export function TextFilter({ filter, value, set }: TextFilterProps) {
   return (
-    <div className="space-y-2">
-      <Label htmlFor={filter.key} className="text-sm font-medium">
+    <div className="min-w-0 space-y-2">
+      <Label
+        htmlFor={filter.key}
+        className="break-anywhere text-sm font-medium"
+      >
         {filter.filter.label}
       </Label>
       <Input

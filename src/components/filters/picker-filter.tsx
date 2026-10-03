@@ -31,10 +31,12 @@ export function PickerFilter({ filter, value, set }: PickerFilterProps) {
   };
 
   return (
-    <div className="space-y-2">
-      <Label className="text-sm font-medium">{filter.filter.label}</Label>
+    <div className="min-w-0 space-y-2">
+      <Label className="break-anywhere text-sm font-medium">
+        {filter.filter.label}
+      </Label>
       <Select value={displayValue} onValueChange={handleChange}>
-        <SelectTrigger>
+        <SelectTrigger className="pointer-coarse:h-11 w-full max-w-full sm:w-fit">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

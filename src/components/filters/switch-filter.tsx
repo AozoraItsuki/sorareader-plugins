@@ -15,10 +15,12 @@ type SwitchFilterProps = {
 
 export function SwitchFilter({ filter, value, set }: SwitchFilterProps) {
   return (
-    <div className="flex items-center justify-between space-x-2 py-2">
+    // The 24px-tall switch itself cannot reach 44px without looking broken, so
+    // the tappable row does.
+    <div className="flex min-w-0 items-center justify-between gap-2 py-2 pointer-coarse:min-h-11">
       <Label
         htmlFor={filter.key}
-        className="text-sm font-medium cursor-pointer"
+        className="min-w-0 cursor-pointer break-anywhere text-sm font-medium"
       >
         {filter.filter.label}
       </Label>

@@ -193,28 +193,36 @@ export function FiltersSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+      <SheetContent
+        side="right"
+        className="w-full max-w-full overflow-y-auto sm:max-w-md"
+      >
         <SheetHeader>
           <SheetTitle>Filters</SheetTitle>
           <SheetDescription>
             Customize your search with these filter options
           </SheetDescription>
         </SheetHeader>
-        <div className="py-6 space-y-4">
+        <div className="space-y-4 py-4 sm:py-6">
           {filterElements || (
-            <p className="text-sm text-muted-foreground text-center py-8">
+            <p className="py-8 text-center text-sm text-muted-foreground">
               No filters available
             </p>
           )}
         </div>
-        <SheetFooter className="flex-col sm:flex-col gap-2">
-          <Button onClick={handleApply} className="w-full">
+        {/* Always stacked: both buttons are `w-full`, so a row layout at `sm`
+            would stretch them past the panel. */}
+        <SheetFooter className="flex-col gap-2">
+          <Button
+            onClick={handleApply}
+            className="pointer-coarse:min-h-11 w-full"
+          >
             Apply Filters
           </Button>
           <Button
             variant="outline"
             onClick={resetFilters}
-            className="w-full gap-2"
+            className="pointer-coarse:min-h-11 w-full gap-2"
           >
             <RotateCcw className="w-4 h-4" />
             Reset to Default

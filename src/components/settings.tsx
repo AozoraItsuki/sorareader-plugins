@@ -81,17 +81,17 @@ const SettingsSection = React.memo(function SettingsSection() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6 relative">
+      <Card className="relative p-4 sm:p-6">
         {status === 'saved' && (
-          <div className="absolute top-4 right-4 z-10 bg-green-500/90 text-white px-4 py-2 rounded-md flex items-center gap-2 shadow-lg animate-in fade-in slide-in-from-top-2">
+          <div className="absolute right-[calc(env(safe-area-inset-right,0px)+1rem)] top-[calc(env(safe-area-inset-top,0px)+1rem)] z-10 flex animate-in items-center gap-2 rounded-md bg-green-500/90 px-4 py-2 text-white shadow-lg fade-in slide-in-from-top-2">
             <Check className="w-4 h-4" /> Settings updated
           </div>
         )}
 
-        <div className="flex items-center justify-between mb-6">
-          <div>
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
+          <div className="min-w-0">
             <h2 className="text-lg font-semibold text-foreground">Settings</h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-muted-foreground">
               Settings are automatically saved
             </p>
           </div>
@@ -106,22 +106,23 @@ const SettingsSection = React.memo(function SettingsSection() {
               <Label className="font-semibold text-foreground">
                 Browser User Agent
               </Label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <Input
                   value={navigator.userAgent}
                   disabled
-                  className="font-mono text-xs flex-1 opacity-60"
+                  className="min-w-0 flex-1 font-mono text-xs opacity-60"
                   title={navigator.userAgent}
                 />
-                <div className="flex items-center gap-2 whitespace-nowrap">
+                <div className="flex shrink-0 items-center gap-2 whitespace-nowrap pointer-coarse:min-h-11">
                   <Checkbox
                     id="use-ua"
+                    className="pointer-coarse:h-5 pointer-coarse:w-5"
                     checked={settings.useUserAgent}
                     onCheckedChange={v => update('useUserAgent', v)}
                   />
                   <Label
                     htmlFor="use-ua"
-                    className="text-sm text-foreground cursor-pointer"
+                    className="cursor-pointer text-sm text-foreground"
                   >
                     Use
                   </Label>
@@ -161,7 +162,7 @@ const SettingsSection = React.memo(function SettingsSection() {
                 value={settings.fetchMode.toString()}
                 onValueChange={v => update('fetchMode', parseInt(v))}
               >
-                <SelectTrigger id="fetch-mode">
+                <SelectTrigger id="fetch-mode" className="w-full sm:w-fit">
                   <SelectValue>
                     {
                       FETCH_MODES[
@@ -200,7 +201,7 @@ function Section({
     <div>
       <div className="flex items-center gap-2 mb-4">
         <div className="h-px flex-1 bg-border" />
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+        <h3 className="min-w-0 truncate text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           {title}
         </h3>
         <div className="h-px flex-1 bg-border" />

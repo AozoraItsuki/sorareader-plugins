@@ -101,19 +101,19 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex-1">
-            <h2 className="text-xl font-semibold text-foreground">
+      <Card className="p-4 sm:p-6">
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-lg font-semibold text-foreground sm:text-xl">
               Parse Chapter
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-muted-foreground">
               {plugin
                 ? 'Enter a chapter path to fetch content'
                 : 'Select a plugin to parse chapters'}
             </p>
             {plugin && (plugin.customCSS || plugin.customJS) && (
-              <div className="flex items-center gap-2 mt-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="text-xs text-muted-foreground">
                   Available:
                 </span>
@@ -132,7 +132,7 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
           </div>
         </div>
 
-        <div className="flex gap-3 mb-6">
+        <div className="mb-6 flex flex-wrap gap-2 sm:flex-nowrap sm:gap-3">
           <Input
             placeholder="Enter chapter path..."
             value={chapterPath}
@@ -144,6 +144,7 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
           <Button
             onClick={fetchChapter}
             disabled={!plugin || !chapterPath.trim() || loading}
+            className="pointer-coarse:min-h-11"
           >
             {loading ? 'Fetching...' : 'Fetch'}
           </Button>
@@ -157,19 +158,19 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
 
         {loading && !chapterText ? (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1 space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="min-w-0 flex-1 space-y-2">
                 <Skeleton className="h-5 w-1/3" />
                 <Skeleton className="h-4 w-2/3" />
               </div>
-              <div className="flex gap-2">
+              <div className="hidden gap-2 sm:flex">
                 <Skeleton className="h-9 w-28" />
                 <Skeleton className="h-9 w-28" />
               </div>
             </div>
             <div className="border border-border rounded-lg">
               <Skeleton className="h-10 w-full rounded-t-lg" />
-              <div className="p-6 space-y-3">
+              <div className="space-y-3 p-4 sm:p-6">
                 <Skeleton className="h-4 w-full" />
                 <Skeleton className="h-4 w-11/12" />
                 <Skeleton className="h-4 w-full" />
@@ -180,7 +181,7 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
             </div>
           </div>
         ) : !chapterText ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
             <div className="rounded-full bg-muted p-4 mb-4">
               <FileText className="w-8 h-8 text-muted-foreground" />
             </div>
@@ -195,17 +196,17 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
           </div>
         ) : chapterText ? (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1">
                 <h3 className="text-lg font-semibold text-foreground">
                   Chapter Content
                 </h3>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="break-anywhere mt-1 text-sm text-muted-foreground">
                   {chapterPath}
                 </p>
               </div>
-              <div className="flex gap-2 items-center">
-                <div className="flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-muted/50">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="pointer-coarse:min-h-11 flex items-center gap-2 px-3 py-2 border border-border rounded-lg bg-muted/50">
                   <Code className="w-4 h-4 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">
                     Raw HTML
@@ -220,7 +221,7 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2 bg-transparent"
+                      className="pointer-coarse:min-h-11 gap-2 bg-transparent"
                       onClick={() =>
                         copyToClipboard(chapterPath, 'Chapter path')
                       }
@@ -238,7 +239,7 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2 bg-transparent"
+                      className="pointer-coarse:min-h-11 gap-2 bg-transparent"
                       onClick={() =>
                         copyToClipboard(chapterText, 'Chapter text')
                       }
@@ -261,14 +262,15 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
                   {chapterText.length} characters)
                 </p>
               </div>
-              <div className="bg-background rounded-b-lg p-6 max-h-[600px] overflow-y-auto">
+              <div className="min-h-0 max-h-[min(60dvh,40rem)] overflow-y-auto rounded-b-lg bg-background p-4 sm:p-6">
                 {showRawHtml ? (
-                  <pre className="text-xs text-foreground font-mono whitespace-pre-wrap break-words">
+                  <pre className="break-anywhere whitespace-pre-wrap font-mono text-xs text-foreground">
                     {chapterText}
                   </pre>
                 ) : (
                   <div
-                    className="prose prose-sm dark:prose-invert max-w-none text-foreground"
+                    data-slot="chapter-prose"
+                    className="prose prose-sm max-w-none break-anywhere text-foreground dark:prose-invert"
                     dangerouslySetInnerHTML={{
                       __html: chapterText,
                     }}
@@ -277,7 +279,7 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-border">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-sm text-muted-foreground">
                   Content loaded successfully
@@ -322,6 +324,7 @@ const ParseChapterSection = React.memo(function ParseChapterSection() {
               <Button
                 variant="outline"
                 size="sm"
+                className="pointer-coarse:min-h-11"
                 onClick={() => {
                   setChapterText('');
                   setChapterPath('');

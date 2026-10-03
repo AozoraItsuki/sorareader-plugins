@@ -93,23 +93,23 @@ const PopularNovelsSection = React.memo(function PopularNovelsSection({
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-lg font-semibold text-foreground">
+      <Card className="p-4 sm:p-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-foreground sm:text-xl">
               Popular Novels
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-muted-foreground">
               {plugin
                 ? `Browse ${isLatest ? 'latest' : 'popular'} novels`
                 : 'Select a plugin to browse novels'}
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="gap-2 bg-transparent"
+              className="pointer-coarse:min-h-11 gap-2 bg-transparent"
               disabled={!plugin || isLatest || !plugin.filters}
               onClick={() => setFiltersOpen(true)}
             >
@@ -118,6 +118,7 @@ const PopularNovelsSection = React.memo(function PopularNovelsSection({
             </Button>
             <Button
               size="sm"
+              className="pointer-coarse:min-h-11"
               disabled={!plugin || loading}
               onClick={() => fetchNovelsByIndex(1)}
             >
@@ -126,6 +127,7 @@ const PopularNovelsSection = React.memo(function PopularNovelsSection({
             <Button
               variant="outline"
               size="sm"
+              className="pointer-coarse:min-h-11"
               disabled={currentIndex === 0 || loading}
               onClick={() => fetchNovelsByIndex(currentIndex + 1)}
             >
@@ -134,7 +136,7 @@ const PopularNovelsSection = React.memo(function PopularNovelsSection({
           </div>
         </div>
 
-        <div className="flex items-center gap-2 mb-6">
+        <div className="mb-6 flex flex-wrap items-center gap-2">
           {['Latest', 'Popular'].map(option => (
             <Badge
               key={option}
@@ -148,7 +150,7 @@ const PopularNovelsSection = React.memo(function PopularNovelsSection({
             </Badge>
           ))}
           {currentIndex > 0 && (
-            <div className="ml-auto flex items-center gap-2">
+            <div className="flex items-center gap-2 sm:ml-auto">
               <span className="text-xs text-muted-foreground">Page</span>
               <Input
                 type="number"
@@ -161,7 +163,7 @@ const PopularNovelsSection = React.memo(function PopularNovelsSection({
                     fetchNovelsByIndex(page);
                   }
                 }}
-                className="w-16 h-7 text-center text-xs"
+                className="pointer-coarse:h-9 h-7 w-16 text-center text-xs"
                 disabled={loading}
               />
               <span className="text-xs text-muted-foreground">
@@ -186,8 +188,8 @@ const PopularNovelsSection = React.memo(function PopularNovelsSection({
             ))}
           </div>
         ) : novels.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="rounded-full bg-muted p-4 mb-4">
+          <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+            <div className="mb-4 rounded-full bg-muted p-4">
               <BookOpen className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">

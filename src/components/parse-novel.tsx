@@ -159,13 +159,13 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">
+      <Card className="p-4 sm:p-6">
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-foreground sm:text-xl">
               Parse Novel
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-muted-foreground">
               {plugin
                 ? 'Enter a novel path to fetch details'
                 : 'Select a plugin to parse novels'}
@@ -173,7 +173,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
           </div>
         </div>
 
-        <div className="flex gap-3 mb-6">
+        <div className="mb-6 flex flex-wrap gap-2 sm:flex-nowrap sm:gap-3">
           <Input
             placeholder="Enter novel path..."
             value={novelPath}
@@ -185,6 +185,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
           <Button
             onClick={fetchNovel}
             disabled={!plugin || !novelPath.trim() || loading}
+            className="pointer-coarse:min-h-11"
           >
             {loading ? 'Fetching...' : 'Fetch'}
           </Button>
@@ -201,7 +202,9 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-2 space-y-4">
                 <div className="flex gap-4">
-                  <Skeleton className="w-32 h-48 rounded-lg" />
+                  <div className="shrink-0">
+                    <Skeleton className="w-24 h-36 rounded-lg sm:w-32 sm:h-48" />
+                  </div>
                   <div className="flex-1 space-y-3">
                     <Skeleton className="h-8 w-3/4" />
                     <Skeleton className="h-4 w-1/4" />
@@ -215,8 +218,8 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
             </div>
           </div>
         ) : !sourceNovel ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="rounded-full bg-muted p-4 mb-4">
+          <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+            <div className="mb-4 rounded-full bg-muted p-4">
               <BookOpen className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">
@@ -232,10 +235,10 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
           <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Novel Info */}
-              <div className="md:col-span-2 space-y-4">
+              <div className="min-w-0 space-y-4 md:col-span-2">
                 <div className="flex gap-4">
                   <div
-                    className="cursor-pointer"
+                    className="shrink-0 cursor-pointer"
                     onClick={() =>
                       copyToClipboard(sourceNovel.cover, 'Cover URL')
                     }
@@ -246,12 +249,12 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                         '/static/coverNotAvailable.webp'
                       }
                       alt={sourceNovel.name}
-                      className="w-32 h-48 rounded-lg object-cover hover:opacity-80 transition-opacity"
+                      className="h-36 w-24 rounded-lg object-cover transition-opacity hover:opacity-80 sm:h-48 sm:w-32"
                       title="Click to copy cover URL"
                     />
                   </div>
-                  <div className="flex-1">
-                    <h3 className="text-2xl font-bold text-foreground mb-3 line-clamp-3">
+                  <div className="min-w-0 flex-1">
+                    <h3 className="mb-3 line-clamp-3 text-xl font-bold text-foreground sm:text-2xl">
                       {sourceNovel.name}
                     </h3>
                     <div className="grid grid-cols-2 gap-3 mb-4">
@@ -296,13 +299,13 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                         </div>
                       )}
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Button
                             variant="outline"
                             size="sm"
-                            className="gap-2 bg-transparent"
+                            className="pointer-coarse:min-h-11 gap-2 bg-transparent"
                             onClick={() =>
                               copyToClipboard(sourceNovel.path, 'Novel path')
                             }
@@ -320,7 +323,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                           <Button
                             variant="outline"
                             size="sm"
-                            className="gap-2 bg-transparent"
+                            className="pointer-coarse:min-h-11 gap-2 bg-transparent"
                             onClick={exportEpub}
                             disabled={isExporting || chapters.length === 0}
                           >
@@ -360,7 +363,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                     <h4 className="font-semibold text-foreground mb-2">
                       Summary
                     </h4>
-                    <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                    <p className="break-anywhere whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
                       {sourceNovel.summary}
                     </p>
                   </div>
@@ -419,29 +422,31 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
             {/* Chapters Table */}
             {(chapters.length > 0 || sourceNovel.totalPages) && (
               <div>
-                <div className="flex items-center justify-between mb-4">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                   <h4 className="font-semibold text-foreground">
                     Chapters ({chapters.length})
                   </h4>
                   {sourceNovel.totalPages && (
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       {sourceNovel.totalPages > 1 && (
                         <>
                           <Button
                             variant="outline"
                             size="sm"
+                            className="pointer-coarse:min-h-11"
                             onClick={() => fetchPage(currentPage - 1)}
                             disabled={currentPage === 1 || loading}
                           >
                             <ChevronLeft className="w-4 h-4" />
                             Previous
                           </Button>
-                          <span className="text-sm text-muted-foreground">
+                          <span className="shrink-0 text-sm whitespace-nowrap text-muted-foreground">
                             Page {currentPage} of {sourceNovel.totalPages}
                           </span>
                           <Button
                             variant="outline"
                             size="sm"
+                            className="pointer-coarse:min-h-11"
                             onClick={() => fetchPage(currentPage + 1)}
                             disabled={
                               currentPage === sourceNovel.totalPages || loading
@@ -455,6 +460,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                       <Button
                         variant="outline"
                         size="sm"
+                        className="pointer-coarse:min-h-11"
                         onClick={() => fetchPage(currentPage || 1)}
                         disabled={loading}
                       >
@@ -463,7 +469,9 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                     </div>
                   )}
                 </div>
-                <div className="overflow-x-auto border border-border rounded-lg">
+                {/* `min-w-0` lets the table scroll inside the main column instead
+                    of stretching it past the viewport. */}
+                <div className="min-w-0 overflow-x-auto rounded-lg border border-border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
                       <tr className="border-b border-border">
@@ -497,7 +505,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                           <td className="py-2.5 px-4 text-muted-foreground text-xs">
                             {index}
                           </td>
-                          <td className="py-2.5 px-4 text-foreground">
+                          <td className="break-anywhere py-2.5 px-4 text-foreground">
                             {chapter.name}
                           </td>
                           <td className="py-2.5 px-4">
@@ -507,7 +515,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-7 w-7 p-0"
+                                    className="h-9 w-9 p-0"
                                     onClick={() =>
                                       copyToClipboard(
                                         chapter.path,
@@ -527,7 +535,7 @@ const ParseNovelSection = React.memo(function ParseNovelSection({
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-7 w-7 p-0"
+                                    className="h-9 w-9 p-0"
                                     onClick={() =>
                                       handleParseChapter(chapter.path)
                                     }

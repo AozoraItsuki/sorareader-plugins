@@ -66,24 +66,26 @@ const SearchNovelsSection = React.memo(function SearchNovelsSection({
 
   return (
     <div className="space-y-6">
-      <Card className="p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">
+      <Card className="p-4 sm:p-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-semibold text-foreground sm:text-xl">
               Search Novels
             </h2>
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-muted-foreground">
               {plugin
                 ? 'Search for novels by title or keywords'
                 : 'Select a plugin to search novels'}
             </p>
           </div>
           {currentPage > 1 && (
-            <Badge variant="secondary">Page {currentPage}</Badge>
+            <Badge variant="secondary" className="shrink-0">
+              Page {currentPage}
+            </Badge>
           )}
         </div>
 
-        <div className="flex gap-3 mb-6">
+        <div className="mb-6 flex flex-wrap gap-2 sm:flex-nowrap sm:gap-3">
           <Input
             placeholder="Enter search term..."
             value={searchTerm}
@@ -94,12 +96,14 @@ const SearchNovelsSection = React.memo(function SearchNovelsSection({
           />
           <Button
             onClick={() => fetchNovels(1)}
+            className="pointer-coarse:min-h-11"
             disabled={!plugin || !searchTerm.trim() || loading}
           >
             {loading ? 'Searching...' : 'Search'}
           </Button>
           <Button
             variant="outline"
+            className="pointer-coarse:min-h-11"
             onClick={() => fetchNovels(currentPage + 1)}
             disabled={!plugin || novels.length === 0 || loading}
           >
@@ -128,8 +132,8 @@ const SearchNovelsSection = React.memo(function SearchNovelsSection({
             ))}
           </div>
         ) : novels.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="rounded-full bg-muted p-4 mb-4">
+          <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+            <div className="mb-4 rounded-full bg-muted p-4">
               <SearchIcon className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-lg font-semibold text-foreground mb-2">

@@ -10,7 +10,7 @@ class WTRLAB implements Plugin.PluginBase {
   id = 'WTRLAB';
   name = 'WTR-LAB';
   site = 'https://wtr-lab.com/';
-  version = '1.7.3';
+  version = '1.7.4';
   icon = 'src/id/wtrlab/icon.png';
   sourceLang = 'en/';
   webStorageUtilized = true;
@@ -805,6 +805,31 @@ class WTRLAB implements Plugin.PluginBase {
       throw new Error(errorMsg);
     }
 
+    // The reader endpoint now answers with chapter metadata plus a `content_url`
+    // instead of the body inline. The encrypted text, `images` and glossary all
+    // live behind that second call, under the same `data.data` shape, so follow
+    // it and keep reading a single payload from here on.
+    const contentUrl: unknown = parsedJson?.content_url;
+    if (typeof contentUrl === 'string' && contentUrl.length > 0) {
+      try {
+        const contentResponse = await fetchApi(
+          new URL(contentUrl, this.site).toString(),
+          { headers: this.apiHeaders(url) },
+        );
+        const contentJson = await contentResponse.json();
+        if (contentJson?.success && contentJson?.data?.data) {
+          parsedJson = contentJson;
+        } else {
+          console.error('Chapter content_url returned no body', {
+            success: contentJson?.success,
+            apiError: contentJson?.error,
+          });
+        }
+      } catch (contentError) {
+        console.error('Failed to fetch chapter content_url:', contentError);
+      }
+    }
+
     const body: unknown = parsedJson?.data?.data?.body;
     if (typeof body !== 'string' || !body) {
       const errMsg =
@@ -951,7 +976,9 @@ class WTRLAB implements Plugin.PluginBase {
       htmlString += `<p><img src="${this.resolveChapterImageUrl(leftover.trim())}" loading="lazy" alt="illustration" /></p>`;
     }
 
-    if (htmlString) {
+    // Never cache a degraded render: a transient API failure would otherwise
+    // stick for the full 30-day TTL and look like a permanent empty chapter.
+    if (htmlString && eLog === '') {
       storage.set(htmlCacheKey, htmlString, Date.now() + this.READER_TTL);
     }
 

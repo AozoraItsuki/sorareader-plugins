@@ -9,6 +9,15 @@
 		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/public/static/src/id/indowebnovel/icon.png"
 	},
 	{
+		"id": "STELLASORA",
+		"name": "Stella Sora",
+		"site": "https://stellasora.miraheze.org/",
+		"lang": "Bahasa Indonesia",
+		"version": "1.0.0",
+		"url": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/.js/plugins/indonesian/stellasora.js",
+		"iconUrl": "https://raw.githubusercontent.com/AozoraItsuki/sorareader-plugins/main/public/static/src/id/stellasora/icon.png"
+	},
+	{
 		"id": "WTRLAB",
 		"name": "WTR-LAB",
 		"site": "https://wtr-lab.com/",

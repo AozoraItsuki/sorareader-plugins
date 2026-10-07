@@ -99,7 +99,7 @@ class StellaSoraPlugin implements Plugin.PluginBase {
   id = 'STELLASORA';
   name = 'Stella Sora';
   site = 'https://stellasora.miraheze.org/';
-  version = '1.0.0';
+  version = '1.1.0';
   icon = 'src/id/stellasora/icon.png';
   sourceLang = 'en';
   webStorageUtilized = true;
@@ -115,8 +115,6 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     },
   } satisfies Filters;
 
-  private readonly NOVEL_NAME = 'Stella Sora - Main Story';
-  private readonly NOVEL_PATH = 'Main_Story';
   private readonly API = this.site + 'w/api.php';
 
   private readonly G_KEY = 'AIzaSyATBXajvzQLTDHEQbcpq0Ihe0vWDHmO520';
@@ -124,17 +122,19 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     'https://translate-pa.googleapis.com/v1/translateHtml';
 
   // Storage keys (per-plugin namespace)
-  private readonly K_NOVEL = 'stellasora:novel';
-  private readonly K_READER = 'stellasora:reader';
+  private readonly K_NOVELS = 'stellasora:novels';
+  private readonly K_NOVEL = 'stellasora:novel:';
+  private readonly K_STAGES = 'stellasora:stages:';
+  private readonly K_STAGE = 'stellasora:stage:';
   private readonly K_TR = 'stellasora:tr';
-  private readonly K_COVER = 'stellasora:cover';
+  private readonly K_COVER = 'stellasora:cover:';
   private readonly K_WIKI = 'stellasora:wiki';
 
   // TTLs in milliseconds (absolute epoch passed to storage.set)
   private readonly NOVEL_TTL = 60 * 60 * 1000;
   private readonly WIKI_TTL = 60 * 60 * 1000;
   private readonly COVER_TTL = 60 * 60 * 1000;
-  private readonly READER_TTL = 30 * 24 * 60 * 60 * 1000;
+  private readonly STAGE_TTL = 30 * 24 * 60 * 60 * 1000;
   private readonly TR_TTL = 365 * 24 * 60 * 60 * 1000;
   private readonly MEM_TTL = 10 * 60 * 1000;
 
@@ -997,24 +997,25 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     );
   }
 
-  /** Novel cover: Chapter stage 01 art, falling back to ss-ms-cover. */
-  private async resolveCover(): Promise<string> {
-    const cached = storage.get<string>(this.K_COVER);
+  /** Chapter cover: ChapterData image → Chapter stage 01 art → ss-ms-cover. */
+  private async resolveChapterCover(image: string | null): Promise<string> {
+    const candidates: string[] = [];
+    if (image !== null && image !== '') candidates.push(image);
+    candidates.push('Chapter stage 01.png', 'Ss-ms-cover.png');
+    const key = this.K_COVER + candidates.join('|');
+    const cached = storage.get<string>(key);
     if (cached !== undefined && cached !== '') return cached;
     const build = this.newBuild();
-    await this.resolveImages(
-      ['Chapter stage 01.png', 'Ss-ms-cover.png'],
-      build,
-    );
-    const url =
-      build.resolver.get(
-        this.normalizeImageName('Chapter stage 01.png').toLowerCase(),
-      ) ??
-      build.resolver.get(
-        this.normalizeImageName('Ss-ms-cover.png').toLowerCase(),
-      ) ??
-      '';
-    if (url !== '') storage.set(this.K_COVER, url, Date.now() + this.COVER_TTL);
+    await this.resolveImages(candidates, build);
+    let url = '';
+    for (const c of candidates) {
+      const u = build.resolver.get(this.normalizeImageName(c).toLowerCase());
+      if (u !== undefined) {
+        url = u;
+        break;
+      }
+    }
+    if (url !== '') storage.set(key, url, Date.now() + this.COVER_TTL);
     return url;
   }
 
@@ -1215,15 +1216,6 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     return out.join('\n');
   }
 
-  private renderChapter(stages: StageContent[], build: Build): string {
-    const parts: string[] = [];
-    stages.forEach((stage, i) => {
-      parts.push(this.renderStage(stage, build));
-      if (i < stages.length - 1) parts.push('<hr />');
-    });
-    return parts.join('\n');
-  }
-
   // ---------------------------------------------------------------------------
   // Plugin API
   // ---------------------------------------------------------------------------
@@ -1249,24 +1241,102 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     throw new Error('stellasora: unknown chapter path ' + path);
   }
 
+  /** Canonical novel token for a path (legacy Main_Story/empty → chapter/1). */
+  private novelToken(path: string): string {
+    const token = path.replace(/^\/+|\/+$/g, '');
+    if (token === '' || token === 'Main_Story') return 'chapter/1';
+    return token;
+  }
+
+  /** Stage list name: zero-padded position + optional label + stage name. */
+  private stageListName(ref: StageRef, pos: number): string {
+    const pos2 = pos < 10 ? '0' + pos : String(pos);
+    const label = ref.label !== String(pos) ? ' - ' + ref.label : '';
+    return pos2 + label + ' - ' + ref.name;
+  }
+
+  /** Chapter entry name from ChapterData (fallback to plain label). */
+  private entryName(label: string, cdName: string | null): string {
+    return cdName !== null && cdName !== '' ? label + ' - ' + cdName : label;
+  }
+
+  /** Cached stage refs for a chapter title (1h). */
+  private async stageRefs(title: string): Promise<StageRef[]> {
+    const key = this.K_STAGES + title;
+    const mem = this.memCache.get(key);
+    if (mem !== undefined && mem.expires > Date.now()) {
+      return mem.value as StageRef[];
+    }
+    const persisted = storage.get<StageRef[]>(key);
+    if (persisted !== undefined) return persisted;
+    const wiki = await this.fetchWikitext(title);
+    const refs = this.parseStageRefs(wiki);
+    this.memCache.set(key, {
+      value: refs,
+      expires: Date.now() + this.MEM_TTL,
+    });
+    storage.set(key, refs, Date.now() + this.WIKI_TTL);
+    return refs;
+  }
+
+  /** Build the 10 chapter entries (cached 1h). */
+  private async buildNovelEntries(): Promise<Plugin.NovelItem[]> {
+    const cached = storage.get<Plugin.NovelItem[]>(this.K_NOVELS);
+    if (cached !== undefined) return cached;
+    const entries: Plugin.NovelItem[] = [];
+    for (let n = 1; n <= 9; n++) {
+      const wiki = await this.fetchWikitext('Main Story/Chapter ' + n);
+      const cd = this.parseChapterData(wiki);
+      const cover = await this.resolveChapterCover(cd.image);
+      entries.push({
+        name: this.entryName('Chapter ' + n, cd.name),
+        path: 'chapter/' + n,
+        cover: cover !== '' ? cover : defaultCover,
+      });
+    }
+    const spWiki = await this.fetchWikitext('Main Story/Special Chapter');
+    const spCd = this.parseChapterData(spWiki);
+    const spCover = await this.resolveChapterCover(spCd.image);
+    entries.push({
+      name: this.entryName('Special Chapter', spCd.name),
+      path: 'chapter/sp',
+      cover: spCover !== '' ? spCover : defaultCover,
+    });
+    storage.set(this.K_NOVELS, entries, Date.now() + this.NOVEL_TTL);
+    return entries;
+  }
+
   async popularNovels(
     pageNo: number,
     { filters }: Plugin.PopularNovelsOptions<typeof this.filters>,
   ): Promise<Plugin.NovelItem[]> {
     if (pageNo > 1 || !this.matchesSearch(filters.search.value)) return [];
-    const cover = await this.resolveCover();
-    return [
-      {
-        name: this.NOVEL_NAME,
-        path: this.NOVEL_PATH,
-        cover: cover !== '' ? cover : defaultCover,
-      },
-    ];
+    return this.buildNovelEntries();
   }
 
   async parseNovel(novelPath: string): Promise<Plugin.SourceNovel> {
-    const cached = storage.get<Plugin.SourceNovel>(this.K_NOVEL);
+    const token = this.novelToken(novelPath);
+    const cacheKey = this.K_NOVEL + token;
+    const cached = storage.get<Plugin.SourceNovel>(cacheKey);
     if (cached !== undefined) return cached;
+
+    const title = this.chapterTitle(token);
+    const chapterWiki = await this.fetchWikitext(title);
+    const cd = this.parseChapterData(chapterWiki);
+    const refs = await this.stageRefs(title);
+
+    const chapters: Plugin.ChapterItem[] = [];
+    let pos = 0;
+    refs.forEach(ref => {
+      if (ref.target === null) return;
+      pos++;
+      chapters.push({
+        name: this.stageListName(ref, pos),
+        path: ref.target,
+        chapterNumber: pos,
+        releaseTime: null,
+      });
+    });
 
     const mainWiki = await this.fetchWikitext('Main Story');
     const leadEnd = mainWiki.search(/^==/m);
@@ -1277,81 +1347,82 @@ class StellaSoraPlugin implements Plugin.PluginBase {
       .filter(l => l !== '' && l.indexOf('[[File:') !== 0)
       .join(' ');
 
-    const chapters: Plugin.ChapterItem[] = [];
-    for (let n = 1; n <= 9; n++) {
-      const wiki = await this.fetchWikitext('Main Story/Chapter ' + n);
-      const cd = this.parseChapterData(wiki);
-      chapters.push({
-        name: cd.name ? 'Chapter ' + n + ' - ' + cd.name : 'Chapter ' + n,
-        path: 'chapter/' + n,
-        chapterNumber: n,
-        releaseTime: null,
-      });
-    }
-    const spWiki = await this.fetchWikitext('Main Story/Special Chapter');
-    const spCd = this.parseChapterData(spWiki);
-    chapters.push({
-      name: spCd.name ? 'Special - ' + spCd.name : 'Special Chapter',
-      path: 'chapter/sp',
-      chapterNumber: 10,
-      releaseTime: null,
-    });
-
     const build = this.newBuild();
     build.baseNames.push('Tyrant', 'Main Story', 'Stella Sora');
     const summaryPayload = this.newPayload(lead, build);
     await this.prepareAndTranslate(build);
     this.finalizeAll(build);
 
-    const cover = await this.resolveCover();
+    const cover = await this.resolveChapterCover(cd.image);
     const novel: Plugin.SourceNovel = {
       path: novelPath,
-      name: this.NOVEL_NAME,
+      name: this.entryName(
+        token === 'chapter/sp'
+          ? 'Special Chapter'
+          : 'Chapter ' + token.slice(8),
+        cd.name,
+      ),
       cover: cover !== '' ? cover : defaultCover,
       summary: summaryPayload.final,
       status: NovelStatus.Ongoing,
       chapters,
     };
-    storage.set(this.K_NOVEL, novel, Date.now() + this.NOVEL_TTL);
+    storage.set(cacheKey, novel, Date.now() + this.NOVEL_TTL);
     return novel;
   }
 
   async parseChapter(chapterPath: string): Promise<string> {
     const token = chapterPath.replace(/^\/+|\/+$/g, '');
-    const cacheKey = this.K_READER + ':' + token;
+    const cacheKey = this.K_STAGE + ':' + token;
     const cached = storage.get<string>(cacheKey);
     if (cached !== undefined && cached !== '') return cached;
 
-    const title = this.chapterTitle(token);
-    const chapterWiki = await this.fetchWikitext(title);
-    const cd = this.parseChapterData(chapterWiki);
-    const refs = this.parseStageRefs(chapterWiki);
-    if (refs.length === 0) {
-      throw new Error('stellasora: no stages found for ' + title);
+    let title = token.replace(/_/g, ' ');
+    let parentTitle: string;
+    const parentMatch = title.match(
+      /^(Main Story\/(?:Chapter \d+|Special Chapter))\//,
+    );
+    if (parentMatch) {
+      parentTitle = parentMatch[1];
+    } else {
+      // Chapter token (chapter/N or chapter/sp) → first linked stage.
+      parentTitle = this.chapterTitle(token);
+      const refs = await this.stageRefs(parentTitle);
+      const first = refs.find(r => r.target !== null);
+      if (first === undefined || first.target === null) {
+        throw new Error('stellasora: no stages found for ' + parentTitle);
+      }
+      title = first.target;
     }
+    const parentWiki = await this.fetchWikitext(parentTitle);
+    const cd = this.parseChapterData(parentWiki);
+    const refs = await this.stageRefs(parentTitle);
+    const seg = title.split('/').pop() || title;
+    const ref =
+      refs.find(r => r.target === title) ??
+      ({
+        depth: 1,
+        label: seg,
+        target: title,
+        name: seg,
+        tagline: null,
+      } as StageRef);
 
     const build = this.newBuild();
-    const stages: StageContent[] = [];
+    const tagline =
+      ref.tagline !== null ? this.newPayload(ref.tagline, build) : null;
+    let stage: StageContent;
     let degraded = false;
-
-    for (const ref of refs) {
-      const tagline =
-        ref.tagline !== null ? this.newPayload(ref.tagline, build) : null;
-      if (ref.target === null) {
-        stages.push(this.emptyStage(ref, tagline));
-        continue;
-      }
-      try {
-        const stageWiki = await this.fetchWikitext(ref.target);
-        stages.push(this.parseStagePage(stageWiki, ref, tagline, build));
-      } catch (e) {
-        console.error('stellasora: stage fetch failed ' + ref.target, e);
-        stages.push(this.emptyStage(ref, tagline));
-        degraded = true;
-      }
+    try {
+      const stageWiki = await this.fetchWikitext(title);
+      stage = this.parseStagePage(stageWiki, ref, tagline, build);
+    } catch (e) {
+      console.error('stellasora: stage fetch failed ' + title, e);
+      stage = this.emptyStage(ref, tagline);
+      degraded = true;
     }
 
-    this.collectNames(stages, cd.name ?? '', build);
+    this.collectNames([stage], cd.name ?? '', build);
     const translatedOk = await this.prepareAndTranslate(build);
     if (!translatedOk) degraded = true;
 
@@ -1367,9 +1438,9 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     });
 
     this.finalizeAll(build);
-    const html = this.renderChapter(stages, build);
+    const html = this.renderStage(stage, build);
     if (!degraded) {
-      storage.set(cacheKey, html, Date.now() + this.READER_TTL);
+      storage.set(cacheKey, html, Date.now() + this.STAGE_TTL);
     }
     return html;
   }
@@ -1378,24 +1449,32 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     searchTerm: string,
     pageNo: number,
   ): Promise<Plugin.NovelItem[]> {
-    if (pageNo > 1 || !this.matchesSearch(searchTerm)) return [];
-    const cover = await this.resolveCover();
-    return [
-      {
-        name: this.NOVEL_NAME,
-        path: this.NOVEL_PATH,
-        cover: cover !== '' ? cover : defaultCover,
-      },
-    ];
+    if (pageNo > 1) return [];
+    const entries = await this.buildNovelEntries();
+    if (searchTerm.trim() === '' || this.matchesSearch(searchTerm)) {
+      return entries;
+    }
+    const q = searchTerm.toLowerCase();
+    return entries.filter(e => e.name.toLowerCase().indexOf(q) >= 0);
   }
 
   resolveUrl = (path: string, isNovel?: boolean): string => {
-    if (isNovel) return this.site + 'wiki/Main_Story';
-    try {
-      return this.site + 'wiki/' + this.chapterTitle(path).replace(/ /g, '_');
-    } catch {
-      return this.site + 'wiki/Main_Story';
+    const token = path.replace(/^\/+|\/+$/g, '');
+    const isNovelPath =
+      isNovel === true ||
+      token === '' ||
+      token === 'Main_Story' ||
+      /^chapter\/(sp|\d+)$/.test(token);
+    if (isNovelPath) {
+      try {
+        return (
+          this.site + 'wiki/' + this.chapterTitle(token).replace(/ /g, '_')
+        );
+      } catch {
+        return this.site + 'wiki/Main_Story';
+      }
     }
+    return this.site + 'wiki/' + token.replace(/ /g, '_');
   };
 }
 

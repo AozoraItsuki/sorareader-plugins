@@ -71,7 +71,7 @@ type Build = {
   baseNames: string[];
   nameList: string[];
   nameIndex: Map<string, number>;
-  slots: { name: string; url: string | null }[];
+  slots: { name: string; url: string | null; alt: string }[];
   resolver: Map<string, string>;
 };
 
@@ -99,7 +99,7 @@ class StellaSoraPlugin implements Plugin.PluginBase {
   id = 'STELLASORA';
   name = 'Stella Sora';
   site = 'https://stellasora.miraheze.org/';
-  version = '1.1.0';
+  version = '1.2.0';
   icon = 'src/id/stellasora/icon.png';
   sourceLang = 'en';
   webStorageUtilized = true;
@@ -373,6 +373,27 @@ class StellaSoraPlugin implements Plugin.PluginBase {
     return match;
   }
 
+  /** Alt text for a File link: `alt:` option, else last caption segment. */
+  private fileAlt(opts: string): string {
+    const parts = opts.split('|').map(o => o.trim());
+    for (const p of parts) {
+      const m = p.match(/^alt\s*:\s*(.+)$/i);
+      if (m) return m[1].trim();
+    }
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      if (
+        /^(thumb|thumbnail|right|left|center|none|frame|frameless|border|link=.*|alt=.*|\d+px|upright.*)$/i.test(
+          p,
+        )
+      ) {
+        continue;
+      }
+      if (p !== '') return p;
+    }
+    return '';
+  }
+
   /**
    * Flatten [[links]]; File links become image slots (tokenized), other links
    * become their display text (collected for name protection).
@@ -387,6 +408,7 @@ class StellaSoraPlugin implements Plugin.PluginBase {
           build.slots.push({
             name: t.replace(/^File:/i, '').trim(),
             url: null,
+            alt: this.fileAlt(label ?? ''),
           });
           return '__SSIMG' + idx + '__';
         }
@@ -487,7 +509,11 @@ class StellaSoraPlugin implements Plugin.PluginBase {
         const slot = build.slots[parseInt(idx, 10)];
         if (!slot || !slot.url) return '';
         return (
-          '<img src="' + this.attr(slot.url) + '" loading="lazy" alt="" />'
+          '<img src="' +
+          this.attr(slot.url) +
+          '" loading="lazy" alt="' +
+          this.attr(slot.alt) +
+          '" />'
         );
       },
     );
@@ -878,6 +904,20 @@ class StellaSoraPlugin implements Plugin.PluginBase {
         if (body !== null) {
           stage.blocks = this.parseMessengerBlocks(body, build);
         }
+      }
+    });
+    // Collect every image name referenced by the stage (portrait | image ::
+    // params and raw background/element names) so resolveImages can
+    // batch-resolve them all.
+    stage.blocks.forEach(block => {
+      if (block.type === 'message' || block.type === 'reply') {
+        if (block.image !== null) build.imageNames.push(block.image);
+      } else if (block.type === 'raw') {
+        block.elements.forEach(el => {
+          if (el.kind === 'bg' || el.kind === 'element') {
+            build.imageNames.push(el.name);
+          }
+        });
       }
     });
     return stage;
